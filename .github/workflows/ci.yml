@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Unit tests
+        run: node --test
+      - name: Build the demo vault
+        run: node bin/noesis.mjs build examples/demo-vault
+      - name: Search smoke test
+        run: node bin/noesis.mjs search examples/demo-vault 分词
+      - name: Benchmark smoke
+        run: node bench/benchmark.mjs 500

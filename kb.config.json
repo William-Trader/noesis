@@ -1,0 +1,8 @@
+{
+  "index": ".noesis",
+  "extensions": [".md", ".markdown", ".txt"],
+  "bigrams": true,
+  "bm25": { "k1": 1.2, "b": 0.75 },
+  "titleFromHeading": true,
+  "snippetLength": 200
+}
