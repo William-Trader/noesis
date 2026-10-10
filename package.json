@@ -1,0 +1,17 @@
+{
+  "name": "noesis",
+  "version": "0.1.0",
+  "description": "Noesis — zero-dependency, local-first knowledge framework: compact BM25 index, CJK+Latin search, incremental builds, wiki-link graph, CLI and local server.",
+  "type": "module",
+  "bin": { "noesis": "bin/noesis.mjs" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test",
+    "demo:build": "node bin/noesis.mjs build examples/demo-vault",
+    "demo:search": "node bin/noesis.mjs search examples/demo-vault 检索"
+  },
+  "files": ["bin", "src", "docs", "examples", "README.md", "README.zh-CN.md", "LICENSE"],
+  "keywords": ["knowledge-base","kb","search","bm25","full-text-search","markdown","local-first","zettelkasten","cjk","wiki","zero-dependency"],
+  "author": "William-Trader",
+  "license": "SEE LICENSE IN LICENSE"
+}

@@ -1,0 +1,21 @@
+# dependencies (Noesis needs none)
+node_modules/
+
+# build artifacts / derived index (rebuildable via: noesis build)
+.noesis/
+*.noesis.bin
+
+# logs & os junk
+*.log
+.DS_Store
+._*
+
+# secrets
+.env
+*.env
+*.pem
+*.key
+
+# editors
+.idea/
+.vscode/
