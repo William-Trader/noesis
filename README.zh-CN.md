@@ -93,6 +93,28 @@ date: 2026-10-11
 
 细节与说明见 [docs/BENCHMARKS.md](docs/BENCHMARKS.md)。
 
+## 整理资产库（给 agent 的约定）
+
+Noesis 不只做检索，也把「怎么整理一个资产库」固化成可执行约定。把本仓库喂给 agent，再指向你的库，它照章办事 —— 完整规范见 [docs/LIBRARY.md](docs/LIBRARY.md)。
+
+```bash
+node bin/noesis.mjs library init  my-library   # 按规范建档：编号目录 + _整理规范.md + INDEX.md
+node bin/noesis.mjs library check my-library   # 体检：库根散装、缺目录、凭据外泄
+node bin/noesis.mjs library dups  my-library   # 内容级查重（先按体积分组，组内才算哈希）
+node bin/noesis.mjs library index my-library   # 重生成 INDEX.md
+node bin/noesis.mjs build         my-library   # 重建检索索引
+```
+
+agent 必须遵守的五条：
+
+1. **编号顶层结构** —— `00-收件箱-INBOX` … `99-凭据-credentials`，库根不散装。
+2. **只移不删** —— 每次移动追加到 `_重组映射表-<日期>.csv`（`src,dst,type`），整轮整理可回滚。
+3. **按内容去重** —— 先按体积分组、组内算哈希，**只认哈希不认文件名**；淘汰方进废纸篓，不用 `rm`。
+4. **凭据隔离** —— 密钥证书只放 `99-凭据-credentials/`，chmod 600。
+5. **每次整理后重生成 `INDEX.md`** —— 它是 agent 唯一采信的索引。
+
+`library check --json` 直接给出机器可读的体检结果，agent 无需解析自然语言即可动手。
+
 ## 开发
 
 ```bash

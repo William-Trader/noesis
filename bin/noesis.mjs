@@ -8,8 +8,9 @@ import { buildIndex, serializeIndex, deserializeIndex, indexStats, docTermMaps }
 import { runSearch } from "../src/search.mjs";
 import { buildGraph } from "../src/graph.mjs";
 import { startServer } from "../src/server.mjs";
+import { scaffoldLibrary, checkLibrary, findDuplicates, renderIndex, LIBRARY_DIRS } from "../src/library.mjs";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const C = { r: "\u001b[0m", dim: "\u001b[2m", b: "\u001b[1m", g: "\u001b[32m", y: "\u001b[33m", rd: "\u001b[31m", cy: "\u001b[36m" };
 
 function human(n) {
@@ -32,6 +33,10 @@ const HELP = [
   "  graph [dir] [--orphans --dangling]  双链图",
   "  doctor [dir]            体检 (断链/缺标题/重复标题)",
   "  serve [dir] [--port N]  本地检索服务",
+  "  library init [dir]      按资产库规范建档 (编号目录 + _整理规范.md + INDEX.md)",
+  "  library check [dir]      资产库体检 (散装/缺目录/凭据外泄/重复)",
+  "  library dups [dir]       内容级查重 (同体积组算哈希)",
+  "  library index [dir]      重生成 INDEX.md",
   "",
   "选项:",
   "  --json    机器可读输出",
@@ -52,6 +57,9 @@ function parseArgs(argv) {
     else if (a === "--dangling") flags.dangling = true;
     else if (a === "--limit") flags.limit = Number(argv[++i]);
     else if (a === "--port") flags.port = Number(argv[++i]);
+    else if (a === "--dirs-only") flags.dirsOnly = true;
+    else if (a === "--dups") flags.dups = true;
+    else if (a === "--keep") { (flags.keep = flags.keep || []).push(argv[++i]); }
     else if (a === "-h" || a === "--help") flags.help = true;
     else if (a === "-v" || a === "--version") flags.version = true;
     else rest.push(a);
@@ -221,6 +229,56 @@ function cmdInit(dir) {
   console.log("\n下一步:  noesis build " + root);
 }
 
+function cmdLibrary(action, dir, flags) {
+  const keep = flags.keep || [];
+  if (action === "init") {
+    const r = scaffoldLibrary(dir, { dirsOnly: flags.dirsOnly });
+    if (flags.json) { console.log(JSON.stringify(r, null, 2)); return; }
+    console.log(C.g + "✓ 资产库已建档" + C.r + "  " + r.root);
+    console.log("  " + C.dim + "新建" + C.r + " " + r.created.length + "   " + C.dim + "已存在" + C.r + " " + r.existed.length);
+    r.created.slice(0, 20).forEach((p) => console.log("  " + C.g + "+" + C.r + " " + p));
+    console.log("\n下一步:  noesis library check " + r.root + "  然后按 _整理规范.md 归类");
+    return;
+  }
+  if (action === "check") {
+    const rep = checkLibrary(dir, { keep, checkDups: flags.dups, maxHashBytes: flags.maxHashBytes });
+    if (flags.json) { console.log(JSON.stringify(rep, null, 2)); return; }
+    console.log(C.b + "Noesis · 资产库体检" + C.r + "  " + rep.root);
+    console.log("  编号目录 " + rep.dirs + "  |  缺失 " + rep.missingDirs.length + "  |  库根散装 " + rep.stray.length + "  |  映射表 " + rep.mappingFiles.length);
+    if (rep.missingDirs.length) { console.log("\n" + C.y + "缺失目录" + C.r); rep.missingDirs.forEach((d) => console.log("  " + d)); }
+    if (rep.stray.length) { console.log("\n" + C.y + "库根散装条目 (应归入编号目录)" + C.r); rep.stray.slice(0, 30).forEach((s) => console.log("  " + (s.isDir ? "[dir]  " : "[file] ") + s.name)); }
+    if (rep.strayArchives.length) { console.log("\n" + C.y + "库根压缩包 (应进 07-原始包-originals/)" + C.r); rep.strayArchives.forEach((n) => console.log("  " + n)); }
+    if (rep.credentialsOutside.length) { console.log("\n" + C.rd + "凭据类文件出现在 99-凭据-credentials/ 之外" + C.r); rep.credentialsOutside.slice(0, 20).forEach((n) => console.log("  " + n)); }
+    if (rep.duplicates) console.log("\n重复组 " + rep.duplicates.groups + "  浪费 " + human(rep.duplicates.wastedBytes));
+    console.log("\n" + (rep.ok ? C.g + "✓ 库根合规" + C.r : C.y + "! " + rep.notes.length + " 条待处理" + C.r));
+    rep.notes.forEach((n) => console.log("  - " + n));
+    return;
+  }
+  if (action === "dups") {
+    const d = findDuplicates(dir, { maxHashBytes: flags.maxHashBytes });
+    if (flags.json) { console.log(JSON.stringify(d, null, 2)); return; }
+    console.log(C.b + "Noesis · 查重" + C.r + "  " + d.root + C.dim + "  (扫描 " + d.scanned + " 个文件)" + C.r);
+    if (!d.groups.length) { console.log(C.g + "✓ 无内容级重复" + C.r); return; }
+    console.log("  重复组 " + d.groups.length + "  可回收 " + human(d.wastedBytes));
+    d.groups.slice(0, 20).forEach((g, i) => {
+      console.log("\n " + (i + 1) + ". " + human(g.bytes) + " x" + g.count + "  " + C.dim + g.hash.slice(0, 12) + C.r);
+      g.paths.forEach((p, j) => console.log("    " + (j === 0 ? C.g + "keep" + C.r : C.rd + "dup " + C.r) + " " + p));
+    });
+    return;
+  }
+  if (action === "index") {
+    const root = resolve(dir);
+    const out = renderIndex(root);
+    const p = join(root, "INDEX.md");
+    writeFileSync(p, out);
+    if (flags.json) { console.log(JSON.stringify({ root, path: p, lines: out.split("\n").length }, null, 2)); return; }
+    console.log(C.g + "✓ INDEX.md 已重生成" + C.r + "  " + p + C.dim + "  (" + out.split("\n").length + " 行)" + C.r);
+    return;
+  }
+  console.error(C.rd + "library 子命令: init | check | dups | index" + C.r);
+  process.exit(1);
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const cmd = argv[0];
@@ -233,6 +291,7 @@ function main() {
   if (cmd === "stats") return cmdStats(rest[0] || ".", flags);
   if (cmd === "graph") return cmdGraph(rest[0] || ".", flags);
   if (cmd === "doctor") return cmdDoctor(rest[0] || ".", flags);
+  if (cmd === "library") return cmdLibrary(rest[0] || "check", rest[1] || ".", flags);
   if (cmd === "serve") {
     const cfg = loadConfig(rest[0] || ".");
     const idx = loadIndexOrExit(cfg);

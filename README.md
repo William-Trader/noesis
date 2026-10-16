@@ -93,6 +93,28 @@ Reproducible via `node bench/benchmark.mjs [N]`. Measured on Apple Silicon / Nod
 
 Details and caveats: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
+## Organizing a library (agent-ready)
+
+Noesis ships the conventions for running a *library* (an asset vault), not just an index. Point an agent at this repo plus your vault and it organises by the book — the full spec is [docs/LIBRARY.md](docs/LIBRARY.md).
+
+```bash
+node bin/noesis.mjs library init  my-library   # scaffold the numbered structure + _整理规范.md + INDEX.md
+node bin/noesis.mjs library check my-library   # audit: stray root entries, missing dirs, leaked credentials
+node bin/noesis.mjs library dups  my-library   # content-level dedupe (size group first, hash within the group)
+node bin/noesis.mjs library index my-library   # regenerate INDEX.md
+node bin/noesis.mjs build         my-library   # (re)build the search index
+```
+
+The five rules the agent works by:
+
+1. **Numbered top level** — `00-收件箱-INBOX` (inbox) … `99-凭据-credentials` (secrets); nothing lives loose at the root.
+2. **Move, never delete** — every move is appended to `_重组映射表-<date>.csv` (`src,dst,type`), so a whole pass can be rolled back.
+3. **Deduplicate by content** — group by size, hash only inside a group, trust the hash and never the filename; discard to the trash, not `rm`.
+4. **Isolate secrets** — keys and certs only under `99-凭据-credentials/`, `chmod 600`.
+5. **Regenerate `INDEX.md`** after every pass — it is the only index the agent trusts.
+
+`library check --json` returns the whole audit as data, so an agent can act on it without parsing prose.
+
 ## Development
 
 ```bash
