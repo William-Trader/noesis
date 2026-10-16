@@ -43,6 +43,56 @@ node bin/noesis.mjs build  examples/demo-vault
 node bin/noesis.mjs search examples/demo-vault 分词
 ```
 
+## 首次接触（给 agent 的约定）
+
+第一次接触这份库时，**不要自己搬动任何东西**：
+
+```bash
+node bin/noesis.mjs library volumes  <库>                        # 列候选盘位
+node bin/noesis.mjs library home     <库> --set "/Volumes/我的盘"  # 记录用户的选择
+node bin/noesis.mjs library manual   <库>                        # 生成说明书.md 交给用户
+```
+
+1. **先问用户**：这份库要放在哪个盘（`library volumes` 给出候选与可用空间；没挂外接盘就如实说）。
+2. 用 `library home --set` 记录 —— 写入 `_库位置.json` 并在 `_库志.jsonl` 留痕；真正的搬迁命令会打印出来（加 `--move` 才执行，且**源目录永不自动删除**）。
+3. 生成 `说明书.md`（`library manual`，中英双语）交给用户 —— 里面有库在哪、怎么打开、怎么备份、怎么恢复、痕迹在哪。
+
+便携相关命令：
+
+| 命令 | 作用 |
+|---|---|
+| `library volumes` | 候选盘位 + 可用空间（搬之前先问用户）|
+| `library home [--set D] [--move]` | 查看 / 记录库在哪个盘 |
+| `library manual` | 生成中英双语说明书 |
+| `library pack [--out F]` | 便携打包交接，排除可再生的索引/node_modules/venv |
+| `library undo <csv> [--dry]` | 按映射表反向还原一次整理 |
+| `library log [--tail N] [--add "op:detail"]` | 查询 / 追加只增不改的痕迹 |
+
+细节见 [docs/PORTABLE.md](docs/PORTABLE.md)。
+
+## 本地界面
+
+一条命令完成：增量构建 → 拉起常驻服务 → 自动打开浏览器：
+
+```bash
+node bin/noesis.mjs ui my-vault                   # 默认 watch：文件一改自动重建索引
+node bin/noesis.mjs ui my-vault --no-open --port 4317
+```
+
+好用在哪儿：
+
+- **即时**：边打字边出结果（防抖 + 取消过期请求），不用回车。
+- **贴着文本检索**：中英混检；`tag:` `path:` `-排除` `"短语"` 全部可用。
+- **键盘优先**：`/` 聚焦 · `↑↓` 选择 · `Enter` 预览 · `Esc` 清空。
+- **筛选条**：点目录 / 标签收窄，再点一次取消。
+- **预览面板**：就地渲染 Markdown，不用跳编辑器。
+- **链接可分享**：查询写进 URL（`?q=...`）。
+- **天生是热的**：索引与 searcher 常驻内存、笔记正文按 mtime 缓存、文件变更由 watcher 自动重建。
+
+真实 1,042 篇的库实测：全量构建 **641 ms**、索引 **2.8 MB**（19.2 万词项）、服务端检索 **约 1 ms**、50 次串行查询 **0.31 s**。
+
+暗/亮主题、移动端适配、零依赖、无外部资源。
+
 ## 命令
 
 | 命令 | 说明 |
@@ -53,7 +103,8 @@ node bin/noesis.mjs search examples/demo-vault 分词
 | `stats [dir]` | 索引统计（`--json`） |
 | `graph [dir]` | 反链 / 孤立 / 枢纽 / 断链 |
 | `doctor [dir]` | 体检：断链、缺标题、重复标题 |
-| `serve [dir] [--port N]` | 本地检索服务 + 极简 UI |
+| `ui [dir]` | 一键：构建 + 起服务 + 开浏览器（默认 watch 自动重建）|
+| `serve [dir] [--port N]` | 本地检索服务（常驻缓存）|
 
 ## 笔记就是 Markdown
 

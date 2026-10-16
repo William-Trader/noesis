@@ -5,7 +5,8 @@ import { join, resolve } from "node:path";
 export const DEFAULTS = {
   index: ".noesis",
   extensions: [".md", ".markdown", ".mdx", ".txt"],
-  exclude: [".git", "node_modules", ".noesis", "dist", "build", "vendor", ".obsidian"],
+  exclude: [".git", "node_modules", ".noesis", "dist", "build", "vendor", ".obsidian",
+            "venv", ".venv", "site-packages", "__pycache__", "homebrew", ".cellar", "Library", "Trash"],
   bigrams: true,
   bm25: { k1: 1.2, b: 0.75 },
   titleFromHeading: true,

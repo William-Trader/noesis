@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noesis · 本地知识检索</title>
+<style>
+:root{
+  --bg:#0b0e14; --bg2:#11151d; --line:#1e2530; --fg:#e6edf3; --dim:#8b98a8;
+  --acc:#6b8cff; --acc2:#8ef0d8; --mark:#ffd76a; --card:#141922; --shadow:0 8px 30px rgba(0,0,0,.45);
+}
+html[data-theme="light"]{
+  --bg:#f7f8fa; --bg2:#ffffff; --line:#e6e9ee; --fg:#1b1f27; --dim:#7a8493;
+  --acc:#4a63ff; --acc2:#0f9e88; --mark:#ffe27a; --card:#ffffff; --shadow:0 6px 24px rgba(20,30,60,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--bg2);flex:0 0 auto}
+.brand{font-weight:800;letter-spacing:.4px;font-size:16px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--acc2);box-shadow:0 0 12px var(--acc2)}
+.path{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-variant-numeric:tabular-nums}
+.chip b{color:var(--fg);font-weight:600}
+.btn{background:transparent;border:1px solid var(--line);color:var(--dim);border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;transition:.15s}
+.btn:hover{color:var(--fg);border-color:var(--acc)}
+.searchbar{display:flex;gap:10px;padding:14px 20px 10px;align-items:center;flex:0 0 auto}
+.inputwrap{position:relative;flex:1}
+input[type=search]{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--fg);
+  padding:13px 44px 13px 40px;font-size:16px;outline:none;transition:.18s;box-shadow:var(--shadow)}
+input[type=search]:focus{border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 22%,transparent),var(--shadow)}
+.ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:15px}
+.kbd{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;padding:0 20px 10px;flex:0 0 auto;max-height:84px;overflow:auto}
+.f{font-size:12px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:999px;padding:3px 10px;cursor:pointer;transition:.15s;white-space:nowrap}
+.f:hover{color:var(--fg);border-color:var(--acc)}
+.f.on{background:color-mix(in srgb,var(--acc) 18%,transparent);border-color:var(--acc);color:var(--fg)}
+main{flex:1;display:grid;grid-template-columns:minmax(320px,42%) 1fr;min-height:0;border-top:1px solid var(--line)}
+.list{overflow:auto;border-right:1px solid var(--line);padding:8px}
+.empty{padding:34px 26px;color:var(--dim);font-size:13.5px;line-height:2}
+.empty code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--fg);font-size:12.5px}
+.hit{padding:11px 13px;border-radius:11px;cursor:pointer;border:1px solid transparent;transition:.12s}
+.hit:hover{background:var(--card)}
+.hit.sel{background:var(--card);border-color:var(--acc)}
+.hit .t{font-weight:650;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.hit .score{font-size:11px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.hit .p{color:var(--dim);font-size:11.5px;margin:2px 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hit .s{color:var(--dim);font-size:12.8px;line-height:1.65;max-height:3.4em;overflow:hidden}
+.hit .s b,.hit .t b{color:var(--fg);background:color-mix(in srgb,var(--mark) 32%,transparent);border-radius:3px;padding:0 2px;font-weight:600}
+.tag{font-size:10.5px;color:var(--acc2);border:1px solid color-mix(in srgb,var(--acc2) 35%,transparent);border-radius:6px;padding:1px 6px;font-weight:500;margin-left:6px}
+.preview{overflow:auto;padding:20px 26px 60px;min-width:0}
+.preview h2.t{font-size:11.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);font-weight:700;margin:0 0 12px}
+.preview .pth{font-size:12px;color:var(--dim);margin-bottom:18px;word-break:break-all}
+.md h1{font-size:23px;margin:6px 0 14px;line-height:1.35}
+.md h2{font-size:18px;margin:22px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.md h3{font-size:15.5px;margin:18px 0 8px;color:var(--fg)}
+.md p{margin:10px 0;color:var(--fg)}
+.md ul,.md ol{margin:10px 0 10px 22px}
+.md li{margin:4px 0}
+.md code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.md pre{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;overflow:auto;margin:14px 0}
+.md pre code{border:0;background:transparent;padding:0;font-size:12.6px;line-height:1.65}
+.md blockquote{border-left:3px solid var(--acc);padding:2px 0 2px 14px;color:var(--dim);margin:12px 0}
+.md a{color:var(--acc);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--acc) 40%,transparent)}
+.md a:hover{border-bottom-color:var(--acc)}
+.md table{border-collapse:collapse;margin:14px 0;font-size:13.5px}
+.md th,.md td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+.md th{background:var(--card);font-weight:650}
+.md hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+footer{flex:0 0 auto;padding:6px 20px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;display:flex;gap:16px;background:var(--bg2);align-items:center}
+footer kbd{border:1px solid var(--line);border-radius:5px;padding:0 5px;font-size:10.5px}
+@media (max-width:820px){main{grid-template-columns:1fr}.preview{display:none}main.show-preview .list{display:none}main.show-preview .preview{display:block}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span>Noesis</div>
+  <div class="path" id="vault"></div>
+  <div class="chips" id="stats"></div>
+  <button class="btn" id="lang" title="Language / 语言">EN</button>
+  <button class="btn" id="theme" title="Theme / 主题">◐</button>
+</header>
+<div class="searchbar">
+  <div class="inputwrap">
+    <span class="ico">⌕</span>
+    <input id="q" type="search" autocomplete="off" spellcheck="false">
+    <span class="kbd">/</span>
+  </div>
+</div>
+<div class="filters" id="filters"></div>
+<main id="main">
+  <div class="list" id="list"></div>
+  <div class="preview" id="preview"></div>
+</main>
+<footer>
+  <span><kbd>/</kbd> <span id="h-focus"></span></span><span><kbd>↑</kbd><kbd>↓</kbd> <span id="h-nav"></span></span><span><kbd>Enter</kbd> <span id="h-open"></span></span><span><kbd>Esc</kbd> <span id="h-clear"></span></span>
+  <span style="margin-left:auto" id="timing"></span>
+</footer>
+<script>
+(function(){
+  var I18N={
+    zh:{ph:"即时检索：中文 / English / tag: / path: / -排除 / \"短语\"",focus:"聚焦",nav:"选择",open:"预览",clear:"清空",
+        preview:"预览",loading:"加载中…",noresult:"无结果。",hits:"命中",docs:"文档",terms:"词项",index:"索引",boot:"索引加载",
+        clearFilter:"✕ 清除筛选",emptyTitle:"输入关键词即刻检索（无需回车）。",
+        emptyL1:"支持 ",emptyL2:"点上方筛选条按目录 / 标签收窄，",emptyL3:" 选择、",emptyL4:" 预览。",
+        ms:"毫秒"},
+    en:{ph:"Instant search: Chinese / English / tag: / path: / -exclude / \"phrase\"",focus:"focus",nav:"move",open:"preview",clear:"clear",
+        preview:"Preview",loading:"Loading…",noresult:"No results.",hits:"hits",docs:"docs",terms:"terms",index:"index",boot:"index load",
+        clearFilter:"✕ Clear filters",emptyTitle:"Type to search instantly — no Enter needed.",
+        emptyL1:"Supports ",emptyL2:"Narrow with the chips above, then ",emptyL3:" to move and ",emptyL4:" to preview.",
+        ms:"ms"}
+  };
+  var LANG=(function(){ try{ return localStorage.getItem("noesis-lang") || (String(navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en"); }catch(e){ return "zh"; } })();
+  function t(k){ return (I18N[LANG] && I18N[LANG][k]) || k; }
+
+  var q=document.getElementById("q"), list=document.getElementById("list"), prev=document.getElementById("preview"),
+      filters=document.getElementById("filters"), stats=document.getElementById("stats"), vault=document.getElementById("vault"),
+      timing=document.getElementById("timing"), main=document.getElementById("main");
+  var hits=[], sel=-1, dirs=[], tags=[], activeDir=null, activeTag=null, seq=0, ctl=null, timer=null, lastStats=null;
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+  function terms(v){return v.toLowerCase().split(/\s+/).filter(function(x){return x && x.indexOf("tag:")!==0 && x.indexOf("path:")!==0 && x[0]!=="-";});}
+  function hl(s,ts){
+    var out=esc(s);
+    ts.slice().sort(function(a,b){return b.length-a.length;}).forEach(function(x){
+      if(!x) return;
+      out=out.replace(new RegExp("("+x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","gi"),"<b>$1</b>");
+    });
+    return out;
+  }
+  function applyLang(){
+    document.documentElement.lang = LANG==="zh"?"zh-CN":"en";
+    q.placeholder=t("ph");
+    document.getElementById("h-focus").textContent=t("focus");
+    document.getElementById("h-nav").textContent=t("nav");
+    document.getElementById("h-open").textContent=t("open");
+    document.getElementById("h-clear").textContent=t("clear");
+    document.getElementById("lang").textContent = LANG==="zh"?"EN":"中文";
+    renderFilters(); renderStats();
+    if(hits.length) renderList(hits); else list.innerHTML=emptyState();
+    if(!hits.length) prev.innerHTML="";
+  }
+  function emptyState(){
+    return '<div class="empty">'+t("emptyTitle")+'<br>'+
+      t("emptyL1")+'<code>中文分词</code> · <code>English</code> · <code>tag:finance</code> · <code>path:项目</code> · <code>-排除</code> · <code>&quot;短语&quot;</code><br>'+
+      t("emptyL2")+'<code>↑↓</code>'+t("emptyL3")+'<code>Enter</code>'+t("emptyL4")+'</div>';
+  }
+  function loadFilters(){
+    fetch("api/facets").then(function(r){return r.json();}).then(function(d){
+      dirs=d.dirs||[]; tags=d.tags||[]; renderFilters();
+    }).catch(function(){});
+  }
+  function renderFilters(){
+    var h="";
+    if(activeDir||activeTag) h+='<button class="f on" data-reset="1">'+t("clearFilter")+'</button>';
+    dirs.forEach(function(d){ h+='<button class="f'+(activeDir===d.name?" on":"")+'" data-dir="'+esc(d.name)+'">'+esc(d.name)+' <b>'+d.count+'</b></button>'; });
+    tags.slice(0,14).forEach(function(x){ h+='<button class="f'+(activeTag===x.name?" on":"")+'" data-tag="'+esc(x.name)+'">#'+esc(x.name)+' <b>'+x.count+'</b></button>'; });
+    filters.innerHTML=h;
+  }
+  function renderStats(){
+    if(!lastStats) return;
+    var d=lastStats;
+    vault.textContent=d.root||"";
+    stats.innerHTML='<span class="chip">'+t("docs")+' <b>'+d.documents+'</b></span><span class="chip">'+t("terms")+' <b>'+d.terms+'</b></span>'+
+      '<span class="chip">'+t("index")+' <b>'+d.indexBytesHuman+'</b></span>'+(d.bootMs!=null?'<span class="chip">'+t("boot")+' <b>'+d.bootMs+' '+t("ms")+'</b></span>':"");
+  }
+  filters.addEventListener("click",function(e){
+    var b=e.target.closest("button.f"); if(!b) return;
+    if(b.dataset.reset){activeDir=null;activeTag=null;}
+    else if(b.dataset.dir){activeDir=(activeDir===b.dataset.dir?null:b.dataset.dir);}
+    else if(b.dataset.tag){activeTag=(activeTag===b.dataset.tag?null:b.dataset.tag);}
+    renderFilters(); run();
+  });
+  function queryString(){
+    var v=q.value.trim(), extra=[];
+    if(activeDir) extra.push("path:"+activeDir);
+    if(activeTag) extra.push("tag:"+activeTag);
+    return [v].concat(extra).join(" ").trim();
+  }
+  function run(){
+    var qs=queryString();
+    if(!qs){ hits=[]; sel=-1; list.innerHTML=emptyState(); prev.innerHTML=""; timing.textContent=""; return; }
+    if(ctl) ctl.abort();
+    ctl=new AbortController();
+    var my=++seq, t0=performance.now();
+    fetch("api/search?limit=50&q="+encodeURIComponent(qs),{signal:ctl.signal}).then(function(r){return r.json();}).then(function(d){
+      if(my!==seq) return;
+      hits=d.hits||[]; sel=hits.length?0:-1;
+      try{ history.replaceState(null,"", q.value.trim()?("?q="+encodeURIComponent(q.value.trim())):location.pathname); }catch(err){}
+      renderList(hits);
+      renderPreview(hits[0]);
+      timing.textContent=(d.ms!=null?d.ms.toFixed(1):Math.round(performance.now()-t0))+" "+t("ms")+" · "+d.total+" "+t("hits");
+    }).catch(function(){});
+  }
+  function renderList(rows){
+    if(!rows.length){ list.innerHTML='<div class="empty">'+t("noresult")+'</div>'; return; }
+    var ts=terms(queryString()), h="";
+    rows.forEach(function(x,i){
+      h+='<div class="hit'+(i===sel?" sel":"")+'" data-i="'+i+'">'+
+        '<div class="t">'+hl(x.title||"(untitled)",ts)+'<span class="score">'+(x.score!=null?x.score.toFixed(2):"")+'</span></div>'+
+        '<div class="p">'+esc(x.path)+(x.tags||[]).map(function(g){return '<span class="tag">'+esc(g)+'</span>';}).join("")+'</div>'+
+        '<div class="s">'+hl(x.snippet||"",ts)+'</div></div>';
+    });
+    list.innerHTML=h;
+  }
+  function select(i){
+    if(i<0||i>=hits.length) return;
+    sel=i;
+    Array.prototype.forEach.call(list.querySelectorAll(".hit"),function(el,j){el.classList.toggle("sel",j===sel);});
+    var el=list.querySelector('.hit[data-i="'+sel+'"]'); if(el) el.scrollIntoView({block:"nearest"});
+    renderPreview(hits[sel]);
+  }
+  function renderPreview(h){
+    if(!h){ prev.innerHTML=""; return; }
+    prev.innerHTML='<h2 class="t">'+t("preview")+'</h2><div class="pth">'+esc(h.path)+'</div><div class="md" id="md">'+t("loading")+'</div>';
+    fetch("api/doc?path="+encodeURIComponent(h.path)).then(function(r){return r.json();}).then(function(d){
+      var box=document.getElementById("md"); if(box) box.innerHTML=md(d.text||"");
+    }).catch(function(){});
+  }
+  // 极简 Markdown 渲染（零依赖，够看就行）
+  function md(src){
+    var s=src.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/,"");
+    var blocks=[];
+    s=s.replace(/```[^\n]*\n([\s\S]*?)```/g,function(m,code){blocks.push(code);return "\u0000B"+(blocks.length-1)+"\u0000";});
+    s=esc(s);
+    s=s.replace(/^#### (.*)$/gm,"<h3>$1</h3>").replace(/^### (.*)$/gm,"<h3>$1</h3>")
+       .replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h1>$1</h1>")
+       .replace(/^&gt; ?(.*)$/gm,"<blockquote>$1</blockquote>")
+       .replace(/^(-{3,}|\*{3,})$/gm,"<hr>");
+    s=s.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/`([^`]+)`/g,"<code>$1</code>");
+    s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,"<a href=\"$2\">$1</a>");
+    s=s.replace(/^(?:[-*+] .*(?:\n|$))+/gm,function(m){
+      return "<ul>"+m.trim().split("\n").map(function(l){return "<li>"+l.replace(/^[-*+] /,"")+"</li>";}).join("")+"</ul>";
+    });
+    s=s.replace(/^(?:\d+\. .*(?:\n|$))+/gm,function(m){
+      return "<ol>"+m.trim().split("\n").map(function(l){return "<li>"+l.replace(/^\d+\. /,"")+"</li>";}).join("")+"</ol>";
+    });
+    s=s.replace(/\u0000B(\d+)\u0000/g,function(m,i){return "<pre><code>"+esc(blocks[+i].replace(/\n$/,""))+"</code></pre>";});
+    s=s.split(/\n{2,}/).map(function(p){ p=p.trim(); if(!p) return ""; return /^<(h1|h2|h3|ul|ol|pre|blockquote|hr|table)/.test(p)?p:"<p>"+p.replace(/\n/g,"<br>")+"</p>"; }).join("");
+    s=s.replace(/<p>(<pre>)/g,"$1").replace(/(<\/pre>)<\/p>/g,"$1");
+    return s;
+  }
+  list.addEventListener("click",function(e){
+    var el=e.target.closest(".hit"); if(!el) return;
+    select(Number(el.dataset.i)); main.classList.add("show-preview");
+  });
+  q.addEventListener("input",function(){ clearTimeout(timer); timer=setTimeout(run,90); });
+  document.addEventListener("keydown",function(e){
+    if(e.key==="/"&&document.activeElement!==q){ e.preventDefault(); q.focus(); q.select(); return; }
+    if(e.key==="Escape"){ q.value=""; activeDir=null; activeTag=null; renderFilters(); run(); q.blur(); return; }
+    if(document.activeElement===q&&e.key==="ArrowDown"){ e.preventDefault(); select(sel+1); return; }
+    if((document.activeElement===q||document.activeElement===list)&&e.key==="ArrowUp"){ e.preventDefault(); select(sel-1); return; }
+    if(e.key==="Enter"){ e.preventDefault(); if(sel>=0) renderPreview(hits[sel]); main.classList.add("show-preview"); }
+  });
+  document.getElementById("lang").addEventListener("click",function(){
+    LANG = LANG==="zh"?"en":"zh";
+    try{ localStorage.setItem("noesis-lang",LANG); }catch(err){}
+    applyLang();
+  });
+  document.getElementById("theme").addEventListener("click",function(){
+    var cur=document.documentElement.getAttribute("data-theme")==="light"?"dark":"light";
+    document.documentElement.setAttribute("data-theme",cur);
+    try{ localStorage.setItem("noesis-theme",cur); }catch(err){}
+  });
+  try{ var th=localStorage.getItem("noesis-theme"); if(th) document.documentElement.setAttribute("data-theme",th); }catch(err){}
+  fetch("api/stats").then(function(r){return r.json();}).then(function(d){ lastStats=d; renderStats(); }).catch(function(){});
+  loadFilters();
+  applyLang();
+  q.focus();
+  // URL 可带查询：?q=xxx 直接出结果，地址栏随输入同步（链接可分享/可收藏）
+  try{ var init=new URLSearchParams(location.search).get("q"); if(init){ q.value=init; run(); } }catch(err){}
+})();
+</script>
+</body>
+</html>

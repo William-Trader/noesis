@@ -26,7 +26,7 @@ export const LIBRARY_DIRS = [
   ["99-凭据-credentials", "密钥/证书/调用信息 —— 敏感，勿外传（chmod 600）"],
 ];
 
-export const LIBRARY_ROOT_FILES = ["INDEX.md", "README.md", "_整理规范.md", "deploy.sh"];
+export const LIBRARY_ROOT_FILES = ["INDEX.md", "README.md", "_整理规范.md", "deploy.sh", "说明书.md", "MANUAL.md"];
 export const MAPPING_PREFIX = "_重组映射表";
 
 export function today() {
@@ -36,6 +36,16 @@ export function today() {
 // 库级记录文件：映射表（_重组映射表-*.csv）与其他 `_*.csv` 台账，都允许留在库根。
 export function isMappingFile(name) {
   return name.startsWith("_") && name.endsWith(".csv");
+}
+
+// 库级台账：_库位置.json（库在哪个盘）/ _库志.jsonl（做过什么）—— 都算库自己的记录。
+export function isRecordFile(name) {
+  return name.startsWith("_") && /\.(csv|json|jsonl)$/i.test(name);
+}
+
+// 库级入口脚本：_资产库检索.command 这类双击即用的启动器。
+export function isLauncherFile(name) {
+  return name.startsWith("_") && /\.(command|sh)$/i.test(name);
 }
 
 // 凭据判定只认「文件名/扩展名 + 位置」，不认路径里的关键词 ——
@@ -60,7 +70,7 @@ export function allowedRootEntry(name, keep = []) {
   if (keep.includes(name)) return true;
   if (LIBRARY_DIRS.some((d) => d[0] === name)) return true;
   if (LIBRARY_ROOT_FILES.includes(name)) return true;
-  if (isMappingFile(name)) return true;
+  if (isRecordFile(name) || isLauncherFile(name)) return true;
   return false;
 }
 
@@ -157,7 +167,8 @@ export function checkLibrary(root, opts = {}) {
   const abs = resolve(root);
   const keep = opts.keep || [];
   if (!existsSync(abs)) return { root: abs, fatal: "目录不存在" };
-  const entries = readdirSync(abs);
+  // 点开头的条目（.noesis 索引目录 / .DS_Store / .git 等）不算「库根散装」——它们是工具自身的产物。
+  const entries = readdirSync(abs).filter((n) => !n.startsWith("."));
   const missingDirs = LIBRARY_DIRS.map((d) => d[0]).filter((n) => !existsSync(join(abs, n)));
   const stray = entries.filter((n) => !allowedRootEntry(n, keep));
   const mappingFiles = entries.filter(isMappingFile);
@@ -228,7 +239,7 @@ function specTemplate() {
     "| 目录 | 放什么 |",
     "|---|---|",
     ...LIBRARY_DIRS.map((d) => "| " + d[0] + "/ | " + d[1] + " |"),
-    "| 库级文件 | INDEX.md / README.md / _整理规范.md / deploy.sh / _重组映射表-*.csv |",
+    "| 库级文件 | INDEX.md / README.md / 说明书.md / _整理规范.md / deploy.sh / _重组映射表-*.csv / _库位置.json / _库志.jsonl / _*.command |",
     "",
     "## 规矩",
     "",

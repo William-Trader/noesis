@@ -41,7 +41,8 @@ export function snippetFrom(text, terms, maxLen) {
 export function runSearch(idx, cfg, rawQuery, opts) {
   opts = opts || {};
   const q = parseQuery(rawQuery);
-  const searcher = createSearcher(idx, cfg);
+  // 复用常驻 searcher：服务端把构造好的实例传进来，避免每次请求重建（热路径）。
+  const searcher = opts.searcher || createSearcher(idx, cfg);
   const queryText = q.terms.length ? q.terms.join(" ") : rawQuery;
   const result = searcher(queryText, { limit: 1e9 });
   let hits = result.hits;
