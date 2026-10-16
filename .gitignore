@@ -5,6 +5,10 @@ node_modules/
 .noesis/
 *.noesis.bin
 
+# packaged tarballs (npm pack output — attached to Releases, never committed)
+*.tgz
+*.tar.gz
+
 # logs & os junk
 *.log
 .DS_Store
