@@ -11,6 +11,8 @@
 
 [English](README.md) · [架构](docs/ARCHITECTURE.md) · [索引格式](docs/SPEC.md) · [检索语法](docs/QUERY.md) · [基准](docs/BENCHMARKS.md)
 
+<img src="docs/screenshot.png" alt="Noesis 本地界面：即时检索、筛选与预览" width="820">
+
 </div>
 
 ## 为什么再造一个知识库
