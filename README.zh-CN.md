@@ -1,8 +1,8 @@
 <div align="center">
 
-# Noesis · 诺伊斯
+# Noesis · agent 资产库
 
-**零依赖、本地优先的知识框架。**
+**零依赖、本地优先的知识框架。**（中文名：**agent 资产库**）
 紧凑二进制索引 · BM25 · 中英混合检索 · 增量构建 · 双链图谱。
 
 ![dependencies](https://img.shields.io/badge/依赖-0-brightgreen)

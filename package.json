@@ -1,7 +1,7 @@
 {
   "name": "noesis",
   "version": "0.4.0",
-  "description": "Noesis — zero-dependency, local-first knowledge framework: compact BM25 index, CJK+Latin search, incremental builds, wiki-link graph, CLI and local server.",
+  "description": "Noesis (agent 资产库) — zero-dependency, local-first knowledge/asset library framework: compact BM25 index, CJK+Latin search, incremental builds, wiki-link graph, portable library conventions, CLI and local UI.",
   "type": "module",
   "bin": { "noesis": "bin/noesis.mjs" },
   "engines": { "node": ">=18" },

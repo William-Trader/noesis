@@ -81,6 +81,7 @@ function parseArgs(argv) {
     else if (a === "--dry") flags.dry = true;
     else if (a === "--actor") flags.actor = argv[++i];
     else if (a === "--noesis-path") flags.noesisPath = argv[++i];
+    else if (a === "--label") flags.label = argv[++i];
     else if (a === "-h" || a === "--help") flags.help = true;
     else if (a === "-v" || a === "--version") flags.version = true;
     else rest.push(a);
@@ -265,7 +266,7 @@ function cmdUi(dir, flags) {
   const idx = build(cfg.root, { full: flags.full, quiet: true });
   const bootMs = Date.now() - t0;
   const rebuild = () => build(cfg.root, { quiet: true });
-  const s = startServer(idx, cfg, { port: flags.port, watch: !flags.noWatch, rebuild, bootMs });
+  const s = startServer(idx, cfg, { port: flags.port, watch: !flags.noWatch, rebuild, bootMs, label: flags.label });
   const url = "http://127.0.0.1:" + s.port + "/";
   console.log(C.g + "✓ Noesis 已就绪" + C.r + "  " + url);
   console.log("  " + C.dim + "文档" + C.r + " " + idx.N + "   " + C.dim + "索引加载" + C.r + " " + bootMs + "ms   " + C.dim + "watch" + C.r + " " + (flags.noWatch ? "off" : "on（改动自动重建）"));

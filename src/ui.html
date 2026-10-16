@@ -162,7 +162,7 @@ footer kbd{border:1px solid var(--line);border-radius:5px;padding:0 5px;font-siz
   function renderStats(){
     if(!lastStats) return;
     var d=lastStats;
-    vault.textContent=d.root||"";
+    vault.textContent=d.label||d.root||"";
     stats.innerHTML='<span class="chip">'+t("docs")+' <b>'+d.documents+'</b></span><span class="chip">'+t("terms")+' <b>'+d.terms+'</b></span>'+
       '<span class="chip">'+t("index")+' <b>'+d.indexBytesHuman+'</b></span>'+(d.bootMs!=null?'<span class="chip">'+t("boot")+' <b>'+d.bootMs+' '+t("ms")+'</b></span>':"");
   }
