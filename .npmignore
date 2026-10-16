@@ -1,0 +1,4 @@
+# 派生数据 / 可再生重物：不进包（clone 后 noesis build 即可重建）
+.noesis/
+*.log
+.DS_Store
