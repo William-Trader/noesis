@@ -22,7 +22,8 @@ function json(res, code, obj) {
   res.end(body);
 }
 
-// portOrOpts: number(向后兼容) 或 { port, watch, rebuild, bootMs }
+// portOrOpts: number(向后兼容) 或 { port, watch, rebuild, bootMs, label }
+// label：界面顶栏显示的名字（不填则显示 vault 绝对路径）—— 公开截图时用它避免暴露本机路径。
 export function startServer(idx, cfg, portOrOpts) {
   const opts = portOrOpts && typeof portOrOpts === "object" ? portOrOpts : { port: portOrOpts };
   const state = { idx, searcher: createSearcher(idx, cfg), bootMs: opts.bootMs || 0, rebuiltAt: 0, rebuilds: 0 };
@@ -73,7 +74,7 @@ export function startServer(idx, cfg, portOrOpts) {
     if (p === "/api/stats") {
       const s = state.idx.stats || {};
       json(res, 200, {
-        root: cfg.root, documents: state.idx.N, terms: state.idx.terms.size,
+        root: cfg.root, label: opts.label || null, documents: state.idx.N, terms: state.idx.terms.size,
         indexBytes: s.indexBytes || 0, indexBytesHuman: human(s.indexBytes || 0),
         bootMs: Math.round(state.bootMs), rebuilds: state.rebuilds, rebuiltAt: state.rebuiltAt,
       });
