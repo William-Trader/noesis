@@ -11,6 +11,8 @@ Compact binary index · BM25 · CJK + Latin search · incremental builds · wiki
 
 [中文](README.zh-CN.md) · [Architecture](docs/ARCHITECTURE.md) · [Index spec](docs/SPEC.md) · [Query syntax](docs/QUERY.md) · [Benchmarks](docs/BENCHMARKS.md)
 
+<img src="docs/screenshot.png" alt="Noesis local UI: instant search, facets and preview" width="820">
+
 </div>
 
 ## Why another knowledge base?
