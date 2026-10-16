@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // Noesis · command line interface (zero dependencies).
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, basename } from "node:path";
 import { loadConfig } from "../src/config.mjs";
 import { walk, parseDoc } from "../src/corpus.mjs";
 import { buildIndex, serializeIndex, deserializeIndex, indexStats, docTermMaps } from "../src/index.mjs";
 import { runSearch } from "../src/search.mjs";
 import { buildGraph } from "../src/graph.mjs";
 import { startServer } from "../src/server.mjs";
+import { spawn } from "node:child_process";
 import { scaffoldLibrary, checkLibrary, findDuplicates, renderIndex, LIBRARY_DIRS } from "../src/library.mjs";
+import { listedVolumes, currentVolume, displayVolume, readHome, recordHome, readJournal, appendJournal, undoMapping, packLibrary, manualText, JOURNAL, HOME_RECORD, MANUAL_FILE } from "../src/portable.mjs";
 
-const VERSION = "0.2.0";
+const VERSION = "0.4.0";
 const C = { r: "\u001b[0m", dim: "\u001b[2m", b: "\u001b[1m", g: "\u001b[32m", y: "\u001b[33m", rd: "\u001b[31m", cy: "\u001b[36m" };
 
 function human(n) {
@@ -33,10 +35,17 @@ const HELP = [
   "  graph [dir] [--orphans --dangling]  双链图",
   "  doctor [dir]            体检 (断链/缺标题/重复标题)",
   "  serve [dir] [--port N]  本地检索服务",
+  "  ui [dir]               一键：增量构建 + 起服务 + 开浏览器 (默认 watch 自动重建)",
   "  library init [dir]      按资产库规范建档 (编号目录 + _整理规范.md + INDEX.md)",
   "  library check [dir]      资产库体检 (散装/缺目录/凭据外泄/重复)",
   "  library dups [dir]       内容级查重 (同体积组算哈希)",
   "  library index [dir]      重生成 INDEX.md",
+  "  library volumes [dir]     列出候选盘位 (第一次接触先问用户放哪个盘)",
+  "  library home [dir]        库在哪 / --set <盘> [--move] 记录或搬到指定盘",
+  "  library manual [dir]      生成中英双语说明书 -> 说明书.md",
+  "  library log [dir]         痕迹查询 (_库志.jsonl) · --add \"op:detail\" 追加",
+  "  library undo [dir] <csv>  按映射表反向还原 (--dry 先看计划)",
+  "  library pack [dir]        便携打包交接 (排除索引/node_modules/venv)",
   "",
   "选项:",
   "  --json    机器可读输出",
@@ -60,6 +69,18 @@ function parseArgs(argv) {
     else if (a === "--dirs-only") flags.dirsOnly = true;
     else if (a === "--dups") flags.dups = true;
     else if (a === "--keep") { (flags.keep = flags.keep || []).push(argv[++i]); }
+    else if (a === "--quiet") flags.quiet = true;
+    else if (a === "--no-open") flags.noOpen = true;
+    else if (a === "--no-watch") flags.noWatch = true;
+    else if (a === "--set") flags.set = argv[++i];
+    else if (a === "--move") flags.move = true;
+    else if (a === "--tail") flags.tail = Number(argv[++i]);
+    else if (a === "--add") flags.add = argv[++i];
+    else if (a === "--lang") flags.lang = argv[++i];
+    else if (a === "--out") flags.out = argv[++i];
+    else if (a === "--dry") flags.dry = true;
+    else if (a === "--actor") flags.actor = argv[++i];
+    else if (a === "--noesis-path") flags.noesisPath = argv[++i];
     else if (a === "-h" || a === "--help") flags.help = true;
     else if (a === "-v" || a === "--version") flags.version = true;
     else rest.push(a);
@@ -124,17 +145,19 @@ function build(root, flags) {
 
   const idx = buildIndex(entries, cfg);
   const stats = { files: files.length, reused, parsed, removed, ms: Date.now() - t0 };
-  idx.stats = stats;
   const newManifest = { version: 1, builtAt: Date.now(), docs: {} };
   for (const ent of entries) {
     newManifest.docs[ent.doc.path] = { mtimeMs: ent.doc.mtimeMs, bytes: ent.doc.bytes, hash: ent.doc.hash, length: ent.doc.length };
   }
   const buf = serializeIndex(idx, stats);
+  stats.indexBytes = buf.length;
+  idx.stats = stats;
   writeFileSync(indexPath, buf);
   writeFileSync(manifestPath, JSON.stringify(newManifest));
 
   const out = { root: cfg.root, indexBytes: buf.length, documents: idx.N, terms: idx.terms.size, reused, parsed, removed, ms: stats.ms };
   if (flags.json) { console.log(JSON.stringify(out, null, 2)); return; }
+  if (flags.quiet) return idx;
   console.log(C.g + "✓ 索引已构建" + C.r + "  " + cfg.root);
   console.log("  " + C.dim + "文档" + C.r + " " + idx.N + "   " + C.dim + "词项" + C.r + " " + idx.terms.size + "   " + C.dim + "索引" + C.r + " " + human(buf.length));
   console.log("  " + C.dim + "复用" + C.r + " " + reused + "   " + C.dim + "重解析" + C.r + " " + parsed + "   " + C.dim + "移除" + C.r + " " + removed + "   " + C.dim + "耗时" + C.r + " " + stats.ms + "ms");
@@ -229,8 +252,135 @@ function cmdInit(dir) {
   console.log("\n下一步:  noesis build " + root);
 }
 
-function cmdLibrary(action, dir, flags) {
+function openBrowser(url) {
+  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  try { spawn(cmd, args, { detached: true, stdio: "ignore" }).unref(); } catch (e) {}
+}
+
+// 一键：增量构建 → 常驻服务（searcher/文档缓存）→ watch 自动重建 → 开浏览器
+function cmdUi(dir, flags) {
+  const cfg = loadConfig(dir);
+  const t0 = Date.now();
+  const idx = build(cfg.root, { full: flags.full, quiet: true });
+  const bootMs = Date.now() - t0;
+  const rebuild = () => build(cfg.root, { quiet: true });
+  const s = startServer(idx, cfg, { port: flags.port, watch: !flags.noWatch, rebuild, bootMs });
+  const url = "http://127.0.0.1:" + s.port + "/";
+  console.log(C.g + "✓ Noesis 已就绪" + C.r + "  " + url);
+  console.log("  " + C.dim + "文档" + C.r + " " + idx.N + "   " + C.dim + "索引加载" + C.r + " " + bootMs + "ms   " + C.dim + "watch" + C.r + " " + (flags.noWatch ? "off" : "on（改动自动重建）"));
+  console.log("  " + C.dim + "快捷键" + C.r + " / 聚焦 · ↑↓ 选择 · Enter 预览 · Esc 清空 · 点筛选条按目录/标签收窄");
+  if (!flags.noOpen) openBrowser(url);
+  return s.server;
+}
+
+function cmdLibrary(action, dir, flags, extra) {
   const keep = flags.keep || [];
+  extra = extra || [];
+
+  if (action === "volumes") {
+    const vols = listedVolumes();
+    if (flags.json) { console.log(JSON.stringify(vols, null, 2)); return; }
+    console.log(C.b + "候选盘位" + C.r + "（第一次接触请先问用户：这份库放哪个盘？）");
+    vols.forEach((v) => {
+      console.log("  " + (v.external ? C.cy + "[外接]" + C.r : C.dim + "[本机]" + C.r) + " " + v.name);
+      console.log("      " + v.mount + "   可用 " + v.freeGB + " GB / 共 " + v.totalGB + " GB" + (v.writable ? "" : C.y + "  (只读)" + C.r));
+    });
+    if (!vols.some((v) => v.external)) console.log("\n" + C.y + "! 当前没有挂载外接盘：要用移动硬盘就先插入，再重跑本命令。" + C.r);
+    return;
+  }
+
+  if (action === "home") {
+    const home = readHome(dir);
+    const target = flags.set;
+    if (!target) {
+      if (flags.json) { console.log(JSON.stringify(home, null, 2)); return; }
+      console.log(C.b + "库位置" + C.r + "  " + home.root);
+      console.log("  卷        " + home.volume + "   可用 " + (home.freeGB == null ? "?" : home.freeGB + " GB"));
+      console.log("  主机      " + home.host);
+      console.log("  已登记    " + (home.portable ? C.g + "是" + C.r + " (" + home.record.recordedAt + ")" : C.y + "否 —— 跑 library home --set <盘> 记录" + C.r));
+      return;
+    }
+    const vols = listedVolumes();
+    const vol = vols.find((v) => v.mount === target || v.name === target);
+    const dest = vol ? vol.mount : target;
+    if (!existsSync(dest)) { console.error(C.rd + "目标盘不存在或未挂载: " + dest + C.r); process.exit(2); }
+    if (vol && !vol.writable) { console.error(C.rd + "目标盘只读: " + dest + C.r); process.exit(2); }
+    // 已经在目标盘上就不谈「搬迁」，只记录 —— 免得给出误导性的复制命令。
+    const cur = currentVolume(home.root);
+    if (vol && cur.mount === displayVolume(vol.mount)) {
+      const rec0 = recordHome(home.root, dest, { note: "已在目标盘 " + vol.name });
+      console.log(C.g + "✓ 已登记库位置" + C.r + "  " + rec0.path + "  (卷 " + rec0.volume + ")");
+      console.log("  " + C.dim + "库已经在这个盘上，无需搬迁。" + C.r);
+      return;
+    }
+    const destLib = join(dest, basename(home.root));
+    if (flags.move) {
+      console.log(C.b + "复制中" + C.r + "  " + home.root + "  ->  " + destLib);
+      execFileSync("rsync", ["-a", home.root + "/", destLib + "/"], { stdio: "inherit" });
+      appendJournal(home.root, { op: "move", detail: "rsync 复制到 " + destLib + "（源未删）", actor: "agent" });
+      console.log(C.g + "✓ 复制完成" + C.r + "  源库仍在原地：" + home.root);
+      console.log("  " + C.y + "确认新位置可用后，是否删除源目录由你决定（本工具不自动删）。" + C.r);
+      console.log("  新位置登记: noesis library home \"" + destLib + "\" --set \"" + dest + "\"");
+      return;
+    }
+    const rec = recordHome(home.root, dest, { note: "目标 " + destLib });
+    console.log(C.g + "✓ 已登记库位置" + C.r + "  " + rec.path + "  (卷 " + rec.volume + ")");
+    console.log("  真正搬过去（源文件不会删）：");
+    console.log("    " + C.cy + "noesis library home \"" + home.root + "\" --set \"" + dest + "\" --move" + C.r);
+    return;
+  }
+
+  if (action === "manual") {
+    const out = manualText(dir, { lang: flags.lang || "both", noesisPath: flags.noesisPath || "<noesis>/bin/noesis.mjs" });
+    const p = flags.out ? resolve(flags.out) : join(resolve(dir), MANUAL_FILE);
+    writeFileSync(p, out);
+    appendJournal(dir, { op: "manual", detail: "生成说明书 " + p, actor: "agent" });
+    if (flags.json) { console.log(JSON.stringify({ path: p, lines: out.split("\n").length }, null, 2)); return; }
+    console.log(C.g + "✓ 说明书已生成" + C.r + "  " + p + C.dim + "  (" + out.split("\n").length + " 行 · 中英双语)" + C.r);
+    console.log("  把这份文件直接交给用户即可。");
+    return;
+  }
+
+  if (action === "log") {
+    const add = flags.add;
+    if (add) {
+      const i = add.indexOf(":");
+      appendJournal(dir, { op: i > 0 ? add.slice(0, i) : "note", detail: i > 0 ? add.slice(i + 1) : add, actor: flags.actor || "agent" });
+      console.log(C.g + "✓ 已记入 " + JOURNAL + C.r + "  " + add);
+      return;
+    }
+    const rows = readJournal(dir, flags.tail || 20);
+    if (flags.json) { console.log(JSON.stringify(rows, null, 2)); return; }
+    console.log(C.b + "库志" + C.r + "  " + join(resolve(dir), JOURNAL) + C.dim + "  (最近 " + rows.length + " 条)" + C.r);
+    if (!rows.length) { console.log("  " + C.dim + "（还没有记录）" + C.r); return; }
+    rows.forEach((r) => console.log("  " + C.dim + (r.ts || "") + C.r + "  " + C.cy + (r.op || "?") + C.r + "  " + (r.detail || "") + C.dim + (r.host ? "  @" + r.host : "") + C.r));
+    return;
+  }
+
+  if (action === "undo") {
+    const csv = extra[0];
+    if (!csv) { console.error(C.rd + "用法: library undo <库> <映射表.csv> [--dry]" + C.r); process.exit(1); }
+    const csvPath = csv[0] === "/" ? csv : join(resolve(dir), csv);
+    if (!existsSync(csvPath)) { console.error(C.rd + "找不到映射表: " + csvPath + C.r); process.exit(2); }
+    const res = undoMapping(dir, csvPath, { dry: flags.dry });
+    if (flags.json) { console.log(JSON.stringify(res, null, 2)); return; }
+    console.log(C.b + "映射表反向还原" + C.r + "  " + basename(csvPath) + (res.dry ? C.y + "  (dry-run，未改动)" + C.r : ""));
+    const TAG = { restore: C.g + "还原" + C.r, restored: C.g + "已还原" + C.r, "skip-exists": C.y + "跳过(原位置已存在)" + C.r, "skip-missing": C.dim + "跳过(找不到)" + C.r, failed: C.rd + "失败" + C.r };
+    res.plan.forEach((p) => console.log("  " + (TAG[p.action] || p.action) + " " + p.src));
+    console.log((res.dry ? "计划还原 " : "实际还原 ") + (res.dry ? res.plan.filter((p) => p.action === "restore").length : res.applied) + " 项");
+    return;
+  }
+
+  if (action === "pack") {
+    const out = packLibrary(dir, flags.out, { dryRun: flags.dry });
+    if (flags.json) { console.log(JSON.stringify(out, null, 2)); return; }
+    if (out.dryRun) { console.log(C.b + "打包命令（dry-run）" + C.r + "\n  " + out.cmd); return; }
+    console.log(C.g + "✓ 便携包已生成" + C.r + "  " + out.outPath + C.dim + "  (" + human(out.bytes) + ")" + C.r);
+    console.log("  交给下一个 agent：解压 → library home <库> --set <盘> → ui <库>");
+    return;
+  }
+
   if (action === "init") {
     const r = scaffoldLibrary(dir, { dirsOnly: flags.dirsOnly });
     if (flags.json) { console.log(JSON.stringify(r, null, 2)); return; }
@@ -275,7 +425,8 @@ function cmdLibrary(action, dir, flags) {
     console.log(C.g + "✓ INDEX.md 已重生成" + C.r + "  " + p + C.dim + "  (" + out.split("\n").length + " 行)" + C.r);
     return;
   }
-  console.error(C.rd + "library 子命令: init | check | dups | index" + C.r);
+  if (action === "open") return cmdUi(dir, flags);
+  console.error(C.rd + "library 子命令: init | check | dups | index | open | volumes | home | manual | log | undo | pack" + C.r);
   process.exit(1);
 }
 
@@ -291,7 +442,8 @@ function main() {
   if (cmd === "stats") return cmdStats(rest[0] || ".", flags);
   if (cmd === "graph") return cmdGraph(rest[0] || ".", flags);
   if (cmd === "doctor") return cmdDoctor(rest[0] || ".", flags);
-  if (cmd === "library") return cmdLibrary(rest[0] || "check", rest[1] || ".", flags);
+  if (cmd === "library") return cmdLibrary(rest[0] || "check", rest[1] || ".", flags, rest.slice(2));
+  if (cmd === "ui") return cmdUi(rest[0] || ".", flags);
   if (cmd === "serve") {
     const cfg = loadConfig(rest[0] || ".");
     const idx = loadIndexOrExit(cfg);

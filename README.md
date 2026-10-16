@@ -43,6 +43,56 @@ node bin/noesis.mjs build  examples/demo-vault
 node bin/noesis.mjs search examples/demo-vault 分词
 ```
 
+## First contact (for agents)
+
+When you touch this library for the first time, do not move anything on your own:
+
+```bash
+node bin/noesis.mjs library volumes  <library>                       # list candidate drives
+node bin/noesis.mjs library home     <library> --set "/Volumes/MY"   # record the user choice
+node bin/noesis.mjs library manual   <library>                       # generate 说明书.md for the user
+```
+
+1. **Ask the user which drive the library should live on** (`library volumes` lists candidates with free space; say so honestly when no external drive is mounted).
+2. Record it with `library home --set` — this writes `_库位置.json` and appends to `_库志.jsonl`; the real move command is printed (`--move` runs it, and the source folder is **never** deleted for you).
+3. Generate `说明书.md` (`library manual`, ZH+EN) and hand it to the user — it documents where the library lives, how to open it, how to back it up, how to recover files and where the trail is.
+
+Portable helpers:
+
+| Command | What it does |
+|---|---|
+| `library volumes` | Candidate drives + free space (ask before moving) |
+| `library home [--set D] [--move]` | Show or record where the library lives |
+| `library manual` | Generate the bilingual user manual |
+| `library pack [--out F]` | Handover bundle, skips the rebuildable index/node_modules/venv |
+| `library undo <csv> [--dry]` | Reverse a reorganisation from its mapping table |
+| `library log [--tail N] [--add "op:detail"]` | Query / append the append-only trail |
+
+Full details: [docs/PORTABLE.md](docs/PORTABLE.md).
+
+## Local UI
+
+One command builds the index, starts a hot local server and opens the browser:
+
+```bash
+node bin/noesis.mjs ui my-vault                   # watch is on: edits re-index themselves
+node bin/noesis.mjs ui my-vault --no-open --port 4317
+```
+
+What makes it pleasant:
+
+- **Instant** — results as you type (debounced, stale requests aborted). No Enter key.
+- **Search that fits the text** — CJK and Latin in one query; `tag:` `path:` `-exclude` and `"phrases"` all work.
+- **Keyboard-first** — `/` focus · `↑↓` move · `Enter` preview · `Esc` clear.
+- **Facets** — click a directory or tag chip to narrow, click again to clear.
+- **Preview pane** — rendered Markdown right there, no click-through to an editor.
+- **Shareable links** — the query lives in the URL (`?q=...`).
+- **Hot by design** — index and searcher stay in memory, note text is cached by mtime, and a file watcher re-indexes on change.
+
+Measured on a real 1,042-note vault: full build **641 ms**, index **2.8 MB** (191,547 terms), search **~1 ms** server-side, 50 sequential queries in **0.31 s**.
+
+Dark/light, mobile-aware layout, zero dependencies, no external assets.
+
 ## Commands
 
 | Command | Description |
@@ -53,7 +103,8 @@ node bin/noesis.mjs search examples/demo-vault 分词
 | `stats [dir]` | Index statistics (`--json`) |
 | `graph [dir]` | Backlinks, orphans, hubs, dangling links |
 | `doctor [dir]` | Health check: broken links, missing/duplicate titles |
-| `serve [dir] [--port N]` | Local search server + minimal UI |
+| `ui [dir]` | Build + serve + open the browser (watch on by default) |
+| `serve [dir] [--port N]` | Local search server (hot, cached) |
 
 ## Notes are just Markdown
 
