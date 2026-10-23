@@ -275,6 +275,9 @@ footer kbd{border:1px solid var(--line);border-radius:5px;padding:0 5px;font-siz
   });
   try{ var th=localStorage.getItem("noesis-theme"); if(th) document.documentElement.setAttribute("data-theme",th); }catch(err){}
   fetch(api("api/stats")).then(function(r){return r.json();}).then(function(d){ lastStats=d; renderStats(); }).catch(function(){});
+  fetch(api("api/version")).then(function(r){return r.json();}).then(function(v){
+    if(v && v.updateAvailable && stats) stats.innerHTML += '<span class="chip" style="border-color:var(--acc);color:var(--fg)">v <b>'+esc(v.latest)+'</b></span>';
+  }).catch(function(){});
   loadFilters();
   applyLang();
   q.focus();

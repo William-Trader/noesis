@@ -5,7 +5,7 @@
 // its own doc table and term postings; the vault is the merge of its segments.
 import { gzipSync, gunzipSync } from "node:zlib";
 import { ByteWriter, ByteReader } from "./varint.mjs";
-import { tokenize, tokenizeUnique } from "./tokenize.mjs";
+import { tokenizeUnique } from "./tokenize.mjs";
 
 export const MAGIC = "NOESIS01";
 export const VERSION = 1;

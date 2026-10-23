@@ -9,6 +9,7 @@ import { runSearch } from "./search.mjs";
 import { createSearcher } from "./index.mjs";
 import { linkAuthority, relatedDocs } from "./graph.mjs";
 import { ensureState, countDrift, segmentBytes } from "./segments.mjs";
+import { readCachedUpdate, currentVersion } from "./update.mjs";
 
 const UI_HTML = readFileSync(new URL("./ui.html", import.meta.url), "utf8");
 
@@ -90,6 +91,17 @@ export function startServer(idx, cfg, portOrOpts) {
     const p = url.pathname;
 
     if (p === "/api/health") { json(res, 200, { ok: true, docs: state.idx.N, rebuilds: state.rebuilds }); return; }
+    if (p === "/api/version") {
+      const cached = readCachedUpdate(join(cfg.indexDir, "update.json"));
+      json(res, 200, {
+        version: currentVersion(),
+        latest: cached && cached.data ? cached.data.latest : null,
+        updateAvailable: cached && cached.data ? !!cached.data.updateAvailable : false,
+        releaseUrl: cached && cached.data ? cached.data.releaseUrl : null,
+        checkedAt: cached ? new Date(cached.at).toISOString() : null
+      });
+      return;
+    }
     if (!authorized(req, url, token)) { json(res, 401, { error: "unauthorized" }); return; }
 
     if (p === "/api/search") {
@@ -118,7 +130,10 @@ export function startServer(idx, cfg, portOrOpts) {
     if (p === "/api/stats") {
       const docs = state.idx.docs.filter((d) => d.kind !== "passage").length;
       let bytes = 0;
-      try { bytes = liveState || (liveState = ensureState(cfg)) ? segmentBytes(cfg, liveState || ensureState(cfg)) : 0; } catch (e) { bytes = 0; }
+      try {
+        if (!liveState) liveState = ensureState(cfg);
+        bytes = segmentBytes(cfg, liveState);
+      } catch (e) { bytes = 0; }
       json(res, 200, {
         root: cfg.root, label: opts.label || null, documents: docs, passages: state.idx.N - docs,
         terms: state.idx.terms.size, segments: state.idx.stats ? state.idx.stats.segments : 1,

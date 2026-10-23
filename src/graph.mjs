@@ -44,7 +44,7 @@ export function buildGraph(docs) {
       if (target === undefined) { dangling.push({ from: d.path, to: t }); continue; }
       if (target === i) continue;
       if (!edges[i].includes(target)) edges[i].push(target);
-      if (!back[target].includes(i)) back[target].includes(i) || back[target].push(i);
+      if (!back[target].includes(i)) back[target].push(i);
     }
   });
 

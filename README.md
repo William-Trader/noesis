@@ -131,6 +131,7 @@ Dark/light, mobile-aware layout, zero dependencies, no external assets.
 | `sync [dir] --from <copy>` | Bring edits back from a portable copy (old files are backed up) |
 | `onboard [dir]` | First-contact wizard + the paragraph to hand to an agent |
 | `undo <dir> <op_id>` | Reverse one tidy/sync pass |
+| `update [dir] [--force]` | Compare with the latest GitHub release (6 h cache) |
 
 ## Notes are just Markdown
 

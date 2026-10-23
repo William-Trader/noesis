@@ -4,6 +4,7 @@
 // library. This exposes the same engine as tools, so search, reading, related
 // notes and library health all speak structured JSON.
 import { createInterface } from "node:readline";
+import { join } from "node:path";
 import { runSearch } from "./search.mjs";
 import { createSearcher } from "./index.mjs";
 import { linkAuthority, relatedDocs } from "./graph.mjs";
@@ -11,6 +12,7 @@ import { checkLibrary } from "./library.mjs";
 import { readJournal } from "./portable.mjs";
 import { planOrganization, applyMoves, undoOp } from "./organize.mjs";
 import { planSync, syncBack } from "./sync.mjs";
+import { checkUpdate, currentVersion } from "./update.mjs";
 
 const VERSION = "0.5.0";
 const PROTOCOL = "2024-11-05";
@@ -127,6 +129,14 @@ const TOOLS = [
         apply: { type: "boolean", description: "false = dry run (default)" }
       },
       required: ["from"]
+    }
+  },
+  {
+    name: "noesis_update_check",
+    description: "Check GitHub for a newer Noesis release. Cached for 6 hours; network failures degrade to an error string, never a thrown tool error.",
+    inputSchema: {
+      type: "object",
+      properties: { force: { type: "boolean" }, root: { type: "string" } }
     }
   },
   {
@@ -263,6 +273,12 @@ export async function handleRpc(msg, ctx) {
     if (!from) return reply(asText({ error: "--from is required" }));
     const res = args.apply ? syncBack(root, from, { actor: "mcp" }) : planSync(root, from);
     return reply(asText(res));
+  }
+
+  if (name === "noesis_update_check") {
+    const root = String(args.root || cfg.root);
+    const data = await checkUpdate({ cachePath: join(cfg.indexDir, "update.json"), force: !!args.force });
+    return reply(asText(data));
   }
 
   if (name === "noesis_undo") {
