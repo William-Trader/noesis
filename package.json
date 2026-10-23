@@ -1,7 +1,7 @@
 {
   "name": "noesis",
-  "version": "0.4.0",
-  "description": "Noesis (agent 资产库) — zero-dependency, local-first knowledge/asset library framework: compact BM25 index, CJK+Latin search, incremental builds, wiki-link graph, portable library conventions, CLI and local UI.",
+  "version": "0.5.0",
+  "description": "Noesis (agent 资产库) — zero-dependency, local-first knowledge framework: segmented BM25 index, passage-level hits, CJK+Latin search, append-only incremental builds, graph authority, time-travel search, MCP server, CLI and local UI.",
   "type": "module",
   "bin": { "noesis": "bin/noesis.mjs" },
   "engines": { "node": ">=18" },
@@ -12,7 +12,7 @@
     "demo:ui": "node bin/noesis.mjs ui examples/demo-vault --no-open"
   },
   "files": ["bin", "src", "docs", "examples", "README.md", "README.zh-CN.md", "LICENSE"],
-  "keywords": ["knowledge-base","kb","search","bm25","full-text-search","markdown","local-first","zettelkasten","cjk","wiki","zero-dependency","library","organizer","dedupe","agent","portable","backup","handover","i18n"],
+  "keywords": ["knowledge-base","kb","search","bm25","full-text-search","markdown","local-first","zettelkasten","cjk","wiki","zero-dependency","library","organizer","dedupe","agent","portable","backup","handover","i18n","segments","passages","pagerank","mcp"],
   "author": "William-Trader",
   "license": "SEE LICENSE IN LICENSE"
 }

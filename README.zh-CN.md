@@ -101,12 +101,14 @@ node bin/noesis.mjs ui my-vault --no-open --port 4317
 |---|---|
 | `init [dir]` | 生成 `kb.config.json` 与起始笔记 |
 | `build [dir] [--full]` | 构建或增量更新索引 |
-| `search <dir> <query>` | BM25 检索（`tag:` `path:` `-排除`，"短语"） |
+| `search <dir> <query>` | BM25 检索（`tag:` `path:` `-排除`，"短语" 逐字校验、`--as-of` 时间切片） |
+| `related <dir> <note>` | 双链图上的一阶相关笔记 |
 | `stats [dir]` | 索引统计（`--json`） |
 | `graph [dir]` | 反链 / 孤立 / 枢纽 / 断链 |
 | `doctor [dir]` | 体检：断链、缺标题、重复标题 |
 | `ui [dir]` | 一键：构建 + 起服务 + 开浏览器（默认 watch 自动重建）|
-| `serve [dir] [--port N]` | 本地检索服务（常驻缓存）|
+| `serve [dir] [--port N]` | 本地检索服务（默认只绑 127.0.0.1；`--host` / `--token` 显式放开） |
+| `mcp [dir]` | MCP（stdio JSON-RPC）：检索 / 读取 / 相关 / 统计 / 库体检 |
 
 ## 笔记就是 Markdown
 

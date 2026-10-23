@@ -10,9 +10,12 @@ Noesis is deliberately small: eight core modules, one CLI, one optional server, 
 | `src/tokenize.mjs` | CJK + Latin tokenizer (unigram + bigram + words) |
 | `src/frontmatter.mjs` | Frontmatter splitter + a tiny YAML subset |
 | `src/corpus.mjs` | Directory walk, document parsing, hashing |
-| `src/index.mjs` | Inverted index build, binary (de)serialize, BM25 |
+| `src/index.mjs` | Inverted index build, binary (de)serialize, segment merge, BM25, exact top-k |
+| `src/segments.mjs` | Segment store: manifest v2, append, tombstones, merge, compaction |
+| `src/passages.mjs` | Heading-anchored passage splitter (parent pointer + offsets) |
+| `src/mcp.mjs` | MCP server over stdio JSON-RPC (search / read / related / library) |
 | `src/search.mjs` | Query parsing, filters, snippets |
-| `src/graph.mjs` | Wiki-link resolution, backlinks, orphans, dangling |
+| `src/graph.mjs` | Wiki-link resolution, backlinks, orphans, dangling, PageRank authority, related |
 | `src/server.mjs` | Local HTTP server (`/api/search`, `/api/stats`, minimal UI) |
 | `bin/noesis.mjs` | CLI: init / build / search / stats / graph / doctor / serve |
 
@@ -22,17 +25,19 @@ Noesis is deliberately small: eight core modules, one CLI, one optional server, 
 vault/**/*.md
    |  walk()                     -> file list (respects exclude + extensions)
    v
-parseDoc()                       -> { path,title,tags,links,headings,tokens,hash,mtime,bytes }
-   |  (skipped when unchanged, via manifest)
+parseDoc()                       -> { path,title,tags,links,tokens,hash,passages }
+   |  (skipped when unchanged, via manifest v2)
    v
-buildIndex(entries)              -> inverted index { N, avgdl, docs[], terms: Map }
-   |
-   v
-serializeIndex() -> gzip -> .noesis/index.bin
-                            + .noesis/manifest.json
+changed docs only  ->  buildIndex(entries)  ->  one new segment
+                                              .noesis/segments/seg-NNNNN.bin
+                                              + manifest.json (append)
+   v  at query time
+loadVault()  -> merge segments (later wins) -> { docs, terms }
+             -> graph authority (PageRank) on document rows
+             -> BM25 -> passage boost -> filters/phrases -> top-k
 ```
 
-At query time the CLI/server only needs `index.bin`: load -> BM25 -> rank -> (optional) read the few matched files for snippets.
+At query time the CLI/server only needs the segments plus the graph: load -> merge -> BM25 -> rank -> (optional) read the few matched files, or slice the matched passage by offset.
 
 ## Incremental builds
 
@@ -59,5 +64,6 @@ See [SPEC.md](SPEC.md) for the byte layout. Design choices:
 
 - **Tokenizer is dictionary-free.** Unigram + bigram CJK gives higher recall and needs zero data files, at the cost of a larger index than a good segmenter. For a local KB this is the right call.
 - **No positions.** No phrase/proximity ranking; snippets are recovered by reading the matched file. Keeps the index compact.
-- **Full posting scan per query.** Simple and cache-friendly up to tens of thousands of docs; a top-k heap is the obvious next optimisation for very large vaults (see [BENCHMARKS](BENCHMARKS.md)).
-- **One process, one vault.** No daemon, no background watcher; `build` is explicit.
+- **Full posting scan per query, bounded selection.** Every posting list is still scanned, but only the best `k` hits are kept, and long queries skip terms present in over 90% of the corpus. Ten thousand documents remain the honest ceiling for a single thread.
+- **Passages only for long notes.** Notes below `passageMinDocChars` (20 KB) are their own passage: section-level ranking costs postings, and short notes do not need it.
+- **One process, one vault.** No daemon, no background watcher; `build` is explicit. `mcp` is a stdio server, not a resident service.

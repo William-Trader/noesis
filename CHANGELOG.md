@@ -3,6 +3,32 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-10-23
+
+### Added
+- **Segment index (format `NOESIS02`)** — a build no longer rewrites the vault. It appends one segment with the documents that changed; queries merge segments (later wins) and compaction folds them back when it pays off. `manifest.json` is now v2: `{segments, docs, tombstones}`.
+- **`--as-of <time>`** — time-travel search. Segments carry their build time, so `search --as-of 2026-10-01` answers from the state of the library on that day.
+- **Passage index** — notes at or above `passageMinDocChars` (default 20 KB) are split on headings into passage rows that carry a parent pointer, a heading path and byte offsets. Ranking uses the best passage to boost its document, and the snippet is sliced from that section: results can answer "which section", not just "which file".
+- **Graph authority** — `linkAuthority()` (PageRank, 20 iterations) feeds the ranking as `score × (1 + authorityBoost × authority)`; `relatedDocs()` (personalized PageRank) powers `noesis related` and `/api/related`.
+- **MCP server** — `noesis mcp <dir>` speaks stdio JSON-RPC 2.0 with six tools: `noesis_search`, `noesis_read`, `noesis_related`, `noesis_stats`, `noesis_library_check`, `noesis_library_log`.
+- Search responses now carry `as_of`, `drift`, `returned` and per-hit `section`.
+- UI: freshness chip (index age + pending files), section chips on hits, token-aware requests.
+
+### Changed
+- The server binds **127.0.0.1 by default**; `--host 0.0.0.0` is explicit and `--token` / `NOESIS_TOKEN` guards every API route (health stays open). The UI injects the token for its own fetches.
+- `build` reports segments, reused, parsed and removed counts instead of a single index size.
+- `stats` reports documents, passages, segments, `as_of` and `drift`.
+
+### Fixed
+- **`total` was clipped by `limit`** — it is now counted before slicing, and `returned` is reported separately.
+- **Quoted phrases were parsed but never enforced** — `"alpha beta"` returned documents where the words were far apart. Phrases are now verified literally against the file (whitespace-normalised), with a 2,000-candidate ceiling reported as `phraseTruncated`.
+- **Markdown preview accepted `javascript:` links** — hrefs are now restricted to http(s), mailto, anchors and relative paths.
+
+### Performance (measured on a real 1,210-note vault, Apple Silicon / Node 24)
+- Full build (all rows + passages): **1.23 s**. Edit one note: **64 ms** (previously 630 ms on the same vault, because every edit rewrote the whole index).
+- Index: **3.85 MB** for 1,210 documents / 4,001 passages (document-level baseline 2.92 MB, so passages cost +32%).
+- `node --test`: **37 tests, 0 failures**.
+
 ## [0.4.0] - 2026-10-16
 
 ### Added

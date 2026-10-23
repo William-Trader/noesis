@@ -4,6 +4,7 @@ import { join, extname, relative, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { parseFrontmatter } from "./frontmatter.mjs";
 import { tokenize } from "./tokenize.mjs";
+import { splitPassages } from "./passages.mjs";
 
 const WIKILINK = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 const MDLINK = /\[[^\]]*\]\(([^)]+)\)/g;
@@ -69,6 +70,11 @@ export function parseDoc(fullPath, root, cfg) {
   while ((m = HEADING.exec(content))) headings.push({ level: m[1].length, text: m[2].trim() });
 
   const tokens = tokenize(title + "\n" + content, { bigrams: cfg.bigrams });
+  const bodyStart = raw.length - content.length;
+  const minDoc = cfg.passageMinDocChars == null ? 2000 : cfg.passageMinDocChars;
+  const passages = (cfg.passages === false || content.length < minDoc)
+    ? []
+    : splitPassages(content, { maxChars: cfg.passageMaxChars, minChars: cfg.passageMinChars });
 
   return {
     path: rel,
@@ -80,6 +86,8 @@ export function parseDoc(fullPath, root, cfg) {
     frontmatter: data,
     length: tokens.length,
     tokens,
+    passages,
+    bodyStart: bodyStart > 0 ? bodyStart : 0,
     bytes: stat.size,
     mtimeMs: Math.floor(stat.mtimeMs),
     hash: hashContent(buf)
