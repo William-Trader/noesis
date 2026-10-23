@@ -15,6 +15,22 @@ Compact binary index · BM25 · CJK + Latin search · incremental builds · wiki
 
 </div>
 
+## Built for two kinds of people
+
+**You ship with AI, and your disk looks like it.** A dozen “final” folders on the Desktop, projects from three different tools, screenshots you will never find again. Noesis gives every generated project one home: drop it in, tell your agent to tidy, and it files itself by the rules that live in the library — with a receipt you can undo.
+
+**Loose files make you twitch.** Same. `noesis tidy` shows the plan before it touches anything, never overwrites, never deletes, and prints the exact command that reverses the whole pass. If your idea of calm is a numbered top level and zero stray files at the root, this was written for you.
+
+**You are tired of hunting.** One index over the whole library: instant search, the exact section rather than a 3,000-word file, backlinks and related notes. Stop opening six folders to find the one you remember writing.
+
+**Your notes are nobody else's business.** No account, no sync service, no telemetry, and **no upload endpoint in the program**. The server binds `127.0.0.1` by default. The only outbound request is an optional version check: it sends a User-Agent and receives a tag, never your content, and works fine offline. Zero runtime dependencies, so there is no supply chain to trust. The full source is published (PolyForm Noncommercial — free for personal and research use).
+
+```bash
+git clone https://github.com/William-Trader/noesis.git
+cd noesis
+node bin/noesis.mjs onboard ~/Documents/my-library   # what to say to your agent
+node bin/noesis.mjs tidy    ~/Documents/my-library   # plan first, --yes to apply
+```
 ## Why another knowledge base?
 
 Most tools make you choose between a heavy desktop app, a cloud service, or a folder of Markdown with no search. Noesis is the third option, done properly.
