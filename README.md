@@ -101,12 +101,14 @@ Dark/light, mobile-aware layout, zero dependencies, no external assets.
 |---|---|
 | `init [dir]` | Create `kb.config.json` and a starter note |
 | `build [dir] [--full]` | Build or incrementally update the index |
-| `search <dir> <query>` | BM25 search (`tag:` `path:` `-exclude`, "phrases") |
-| `stats [dir]` | Index statistics (`--json`) |
+| `search <dir> <query>` | BM25 search (`tag:` `path:` `-exclude`, literal `"phrases"`, `--as-of`) |
+| `related <dir> <note>` | Nearest notes on the wiki-link graph |
+| `stats [dir]` | Index statistics: documents, passages, segments, freshness (`--json`) |
 | `graph [dir]` | Backlinks, orphans, hubs, dangling links |
 | `doctor [dir]` | Health check: broken links, missing/duplicate titles |
 | `ui [dir]` | Build + serve + open the browser (watch on by default) |
-| `serve [dir] [--port N]` | Local search server (hot, cached) |
+| `serve [dir] [--port N]` | Local search server (binds 127.0.0.1; `--host` / `--token` to widen) |
+| `mcp [dir]` | MCP server over stdio: search / read / related / stats / library tools |
 
 ## Notes are just Markdown
 
@@ -129,11 +131,13 @@ date: 2026-10-11
 ## How the index works
 
 ```
-.noesis/index.bin        gzip( [header][meta][docTable][termDict+postings] )
-.noesis/manifest.json    per-file hash + size + mtime (incremental)
+.noesis/segments/seg-00001.bin   gzip( [header][meta][docTable][termDict+postings] )
+.noesis/manifest.json            version 2: segments + per-file hash/size/mtime + tombstones
 ```
 
-Terms are stored front-coded (shared-prefix compressed) and postings are varint gap-encoded, so the dictionary scales with shared prefixes rather than raw text. Full format: [docs/SPEC.md](docs/SPEC.md).
+A build **appends** a segment containing only what changed instead of rewriting the vault; a query merges the segments (later wins) and compaction folds them back when it pays off. Terms are front-coded (shared-prefix compressed) and postings are varint gap-encoded, so the dictionary scales with shared prefixes rather than raw text. Full format: [docs/SPEC.md](docs/SPEC.md).
+
+Long notes (20 KB and up) are additionally split on headings into **passages**: ranking uses the best passage, and the snippet comes from that section, so a hit answers "which part" and not just "which file".
 
 ## Benchmarks
 
@@ -143,6 +147,8 @@ Reproducible via `node bench/benchmark.mjs [N]`. Measured on Apple Silicon / Nod
 |---|---|---|---|---|---|
 | 7.78 MB | 2,000 | 474 KB | 5.95% | 0.41 s | 0.42 ms/query |
 | 38.90 MB | 10,000 | 2.29 MB | 5.75% | 4.70 s | 7.5 ms/query |
+
+Measured on a real 1,210-note library (0.5.0): full build **1.23 s**, edit one note **64 ms**, index **3.85 MB** with 4,001 passages (2.92 MB without them). The 64 ms figure is the whole point of the segment store: the same edit cost 630 ms when every build rewrote the index.
 
 Details and caveats: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
@@ -167,6 +173,14 @@ The five rules the agent works by:
 5. **Regenerate `INDEX.md`** after every pass — it is the only index the agent trusts.
 
 `library check --json` returns the whole audit as data, so an agent can act on it without parsing prose.
+
+### Agents: MCP, not terminal scraping
+
+```bash
+node bin/noesis.mjs mcp my-library
+```
+
+Speaks stdio JSON-RPC 2.0 and exposes `noesis_search`, `noesis_read` (optionally one section), `noesis_related`, `noesis_stats`, `noesis_library_check` and `noesis_library_log`. The agent gets structured JSON with `as_of`, `drift` and `section`, and never has to parse a coloured table.
 
 ## Development
 

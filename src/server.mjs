@@ -1,11 +1,14 @@
 // Noesis · local server (zero dependencies).
-// 易用性：键盘优先的即时检索 UI（/ 聚焦 · ↑↓ 选择 · Enter 预览 · Esc 清空）+ 目录/标签筛选。
-// 性能：索引与 searcher 常驻内存、文档按 mtime 缓存、watch 变更后自动重建 —— 检索永远是热的、新的。
+//
+// Local-first means local by default: the server binds 127.0.0.1 unless a host is
+// given explicitly, and an optional token guards every API route.
 import { createServer } from "node:http";
 import { readFileSync, statSync, watch as fsWatch } from "node:fs";
 import { join } from "node:path";
 import { runSearch } from "./search.mjs";
 import { createSearcher } from "./index.mjs";
+import { linkAuthority, relatedDocs } from "./graph.mjs";
+import { ensureState, countDrift, segmentBytes } from "./segments.mjs";
 
 const UI_HTML = readFileSync(new URL("./ui.html", import.meta.url), "utf8");
 
@@ -22,12 +25,27 @@ function json(res, code, obj) {
   res.end(body);
 }
 
-// portOrOpts: number(向后兼容) 或 { port, watch, rebuild, bootMs, label }
-// label：界面顶栏显示的名字（不填则显示 vault 绝对路径）—— 公开截图时用它避免暴露本机路径。
+function authorized(req, url, token) {
+  if (!token) return true;
+  if (url.searchParams.get("token") === token) return true;
+  const h = req.headers.authorization || "";
+  return h === "Bearer " + token;
+}
+
+// portOrOpts: number(向后兼容) 或 { port, host, token, watch, rebuild, bootMs, label, state }
 export function startServer(idx, cfg, portOrOpts) {
   const opts = portOrOpts && typeof portOrOpts === "object" ? portOrOpts : { port: portOrOpts };
-  const state = { idx, searcher: createSearcher(idx, cfg), bootMs: opts.bootMs || 0, rebuiltAt: 0, rebuilds: 0 };
+  const token = opts.token || cfg.token || process.env.NOESIS_TOKEN || "";
+  const host = opts.host || cfg.host || "127.0.0.1";
+  const state = { idx, searcher: createSearcher(idx, cfg), authority: null, bootMs: opts.bootMs || 0, rebuiltAt: 0, rebuilds: 0 };
   const textCache = new Map();
+  let liveState = opts.state || null;
+  let driftCache = { at: 0, value: 0 };
+
+  const authority = () => {
+    if (!state.authority) state.authority = linkAuthority(state.idx.docs);
+    return state.authority;
+  };
 
   const readText = (p) => {
     try {
@@ -42,10 +60,22 @@ export function startServer(idx, cfg, portOrOpts) {
     } catch (e) { return ""; }
   };
 
+  const drift = () => {
+    const now = Date.now();
+    if (driftCache.value && now - driftCache.at < 5000) return driftCache.value;
+    try {
+      if (!liveState) liveState = ensureState(cfg);
+      const v = countDrift(cfg, liveState);
+      driftCache = { at: now, value: v };
+      return v;
+    } catch (e) { return driftCache.value || 0; }
+  };
+
   const facets = () => {
     const dirs = new Map();
     const tags = new Map();
     for (const d of state.idx.docs) {
+      if (d.kind === "passage") continue;
       const top = String(d.path).split("/")[0];
       if (!top || top === String(d.path)) continue;
       dirs.set(top, (dirs.get(top) || 0) + 1);
@@ -59,23 +89,41 @@ export function startServer(idx, cfg, portOrOpts) {
     const url = new URL(req.url, "http://localhost");
     const p = url.pathname;
 
+    if (p === "/api/health") { json(res, 200, { ok: true, docs: state.idx.N, rebuilds: state.rebuilds }); return; }
+    if (!authorized(req, url, token)) { json(res, 401, { error: "unauthorized" }); return; }
+
     if (p === "/api/search") {
       const q = url.searchParams.get("q") || "";
       const limit = Math.min(Number(url.searchParams.get("limit") || 20) || 20, 200);
       const t0 = process.hrtime.bigint();
-      const out = runSearch(state.idx, cfg, q, { limit, readText, searcher: state.searcher });
+      const out = runSearch(state.idx, cfg, q, { limit, readText, searcher: state.searcher, authority: authority() });
       json(res, 200, {
-        query: q, total: out.total, ms: Number(process.hrtime.bigint() - t0) / 1e6,
-        hits: out.hits.map((h) => ({ path: h.doc.path, title: h.doc.title, tags: h.doc.tags, score: h.score, snippet: h.snippet })),
+        query: q, total: out.total, returned: out.returned, ms: Number(process.hrtime.bigint() - t0) / 1e6,
+        as_of: new Date(state.idx.builtAt || 0).toISOString(), drift: drift(),
+        hits: out.hits.map((h) => ({
+          path: h.doc.path, title: h.doc.title, tags: h.doc.tags, section: h.section || null,
+          score: h.score, snippet: h.snippet
+        })),
       });
       return;
     }
 
+    if (p === "/api/related") {
+      const rel = url.searchParams.get("path") || "";
+      const limit = Math.min(Number(url.searchParams.get("limit") || 10) || 10, 50);
+      json(res, 200, { path: rel, related: relatedDocs(state.idx.docs, rel, { limit }) });
+      return;
+    }
+
     if (p === "/api/stats") {
-      const s = state.idx.stats || {};
+      const docs = state.idx.docs.filter((d) => d.kind !== "passage").length;
+      let bytes = 0;
+      try { bytes = liveState || (liveState = ensureState(cfg)) ? segmentBytes(cfg, liveState || ensureState(cfg)) : 0; } catch (e) { bytes = 0; }
       json(res, 200, {
-        root: cfg.root, label: opts.label || null, documents: state.idx.N, terms: state.idx.terms.size,
-        indexBytes: s.indexBytes || 0, indexBytesHuman: human(s.indexBytes || 0),
+        root: cfg.root, label: opts.label || null, documents: docs, passages: state.idx.N - docs,
+        terms: state.idx.terms.size, segments: state.idx.stats ? state.idx.stats.segments : 1,
+        indexBytes: bytes, indexBytesHuman: human(bytes),
+        as_of: new Date(state.idx.builtAt || 0).toISOString(), drift: drift(),
         bootMs: Math.round(state.bootMs), rebuilds: state.rebuilds, rebuiltAt: state.rebuiltAt,
       });
       return;
@@ -85,26 +133,25 @@ export function startServer(idx, cfg, portOrOpts) {
 
     if (p === "/api/doc") {
       const rel = url.searchParams.get("path") || "";
-      const doc = state.idx.docs.find((d) => d.path === rel);
+      const doc = state.idx.docs.find((d) => d.path === rel && d.kind !== "passage");
       if (!doc) { json(res, 404, { error: "not_found", path: rel }); return; }
       json(res, 200, { path: doc.path, title: doc.title, tags: doc.tags || [], text: readText(rel) });
       return;
     }
 
-    if (p === "/api/health") { json(res, 200, { ok: true, docs: state.idx.N, rebuilds: state.rebuilds }); return; }
-
     if (p === "/" || p === "/index.html") {
+      let html = UI_HTML;
+      if (token) html = html.replace("</head>", "<script>window.__NOESIS_TOKEN__=" + JSON.stringify(token) + "</script></head>");
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-      res.end(UI_HTML);
+      res.end(html);
       return;
     }
     json(res, 404, { error: "not_found", path: p });
   });
 
   const listenPort = opts.port == null ? 4317 : opts.port;
-  server.listen(listenPort);
+  server.listen(listenPort, host);
 
-  // watch：内容变更后自动增量重建，检索结果永不过期（无人工刷新）。
   if (opts.watch && typeof opts.rebuild === "function") {
     let timer = null;
     let running = false;
@@ -118,8 +165,11 @@ export function startServer(idx, cfg, portOrOpts) {
           if (next) {
             state.idx = next;
             state.searcher = createSearcher(next, cfg);
+            state.authority = null;
             state.rebuilds += 1;
             state.rebuiltAt = Date.now();
+            liveState = ensureState(cfg);
+            driftCache = { at: 0, value: 0 };
             textCache.clear();
           }
         } catch (e) { /* 重建失败不影响已加载索引 */ }
@@ -135,5 +185,8 @@ export function startServer(idx, cfg, portOrOpts) {
     } catch (e) { /* 平台不支持 recursive watch 时静默降级 */ }
   }
 
-  return { server, port: listenPort, setIndex: (next) => { state.idx = next; state.searcher = createSearcher(next, cfg); } };
+  return {
+    server, port: listenPort, host,
+    setIndex: (next) => { state.idx = next; state.searcher = createSearcher(next, cfg); state.authority = null; }
+  };
 }

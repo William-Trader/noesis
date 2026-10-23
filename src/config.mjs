@@ -11,6 +11,14 @@ export const DEFAULTS = {
   bm25: { k1: 1.2, b: 0.75 },
   titleFromHeading: true,
   snippetLength: 200,
+  passages: true,
+  passageMaxChars: 1200,
+  passageMinDocChars: 20000,
+  passageMinChars: 120,
+  host: "127.0.0.1",
+  token: "",
+  authorityBoost: 0.3,
+  passageBoost: 0.35,
   maxFileBytes: 8 * 1024 * 1024
 };
 

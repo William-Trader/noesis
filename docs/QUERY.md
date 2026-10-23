@@ -22,6 +22,8 @@ Ranking is BM25; documents containing more of the query terms usually rank highe
 
 Filters combine with AND. Available in the CLI and the `/api/search` endpoint.
 
+A quoted phrase is **verified literally** after ranking: candidates are filtered by a whitespace-normalised substring check against the file, so `"alpha beta"` will not match a document where the two words are a sentence apart. Verification is capped at 2,000 candidates; past that the response reports `phraseTruncated: true`.
+
 ## Examples
 
 ```bash
@@ -42,7 +44,15 @@ CLI search reads the matched files and returns a window around the first query-t
 ## Server API
 
 ```
-GET /api/search?q=<query>&limit=10   -> { query, total, hits:[{path,title,tags,score,snippet}] }
-GET /api/stats                       -> index statistics
-GET /doc/<relative-path>             -> raw file text
+GET /api/search?q=<query>&limit=10   -> { query, total, returned, ms, as_of, drift,
+                                          hits:[{path,title,tags,section,score,snippet}] }
+GET /api/related?path=<note>&limit=10 -> { path, related:[{path,title,score}] }
+GET /api/stats                       -> documents, passages, segments, as_of, drift
+GET /api/facets                      -> top directories and tags
+GET /api/doc?path=<relative-path>    -> raw file text
+GET /api/health                      -> { ok, docs, rebuilds }   (never requires a token)
 ```
+
+`total` is counted before `limit` is applied; `returned` is the size of the page. `as_of` is the index build time and `drift` the number of files changed since then — a stale answer is visible, not silent.
+
+When `--token` (or `NOESIS_TOKEN`) is set, every route except `/api/health` requires `?token=…` or `Authorization: Bearer …`. Without it the server binds `127.0.0.1` and is not reachable from the LAN.
