@@ -1,7 +1,7 @@
 // Contract tests for the v0.5 engine: segments, passages, phrases, authority, MCP.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -189,4 +189,46 @@ test("mcp: initialize, tools/list and a search call", async () => {
   const payload = JSON.parse(call.result.content[0].text);
   assert.equal(payload.total, 1);
   assert.equal(payload.hits[0].path, "m.md");
+});
+
+test("organize: plan -> apply -> undo round-trip", async () => {
+  const { planOrganization, applyMoves, undoOp } = await import("../src/organize.mjs");
+  const root = vault({ "loose.md": "# Loose\n\nbody\n", "bundle.zip": "PK" });
+  for (const d of ["00-收件箱-INBOX", "03-知识库-knowledge", "05-归档-archive", "07-原始包-originals", "99-凭据-credentials"]) {
+    mkdirSync(join(root, d), { recursive: true });
+  }
+  writeFileSync(join(root, "03-知识库-knowledge", ".keep"), "");
+
+  const plan = planOrganization(root, { limit: 20 });
+  const md = plan.items.find((i) => i.srcRel === "loose.md");
+  assert.ok(md, "loose.md should be planned");
+  assert.equal(md.dstRel, "03-知识库-knowledge/loose.md");
+  const zip = plan.items.find((i) => i.srcRel === "bundle.zip");
+  assert.equal(zip.dstRel, "07-原始包-originals/bundle.zip");
+
+  const res = applyMoves(root, plan.items.map((i) => ({ src: i.srcRel, dst: i.dstRel })));
+  assert.equal(res.applied, 2, JSON.stringify(res.rejected));
+  assert.ok(existsSync(join(root, "03-知识库-knowledge/loose.md")));
+  assert.ok(existsSync(join(root, res.op_id)), "mapping table must exist");
+
+  const un = undoOp(root, res.op_id);
+  assert.equal(un.applied, 2);
+  assert.ok(existsSync(join(root, "loose.md")), "undo restored the original path");
+  assert.ok(!existsSync(join(root, "03-知识库-knowledge/loose.md")));
+});
+
+test("organize: refuses traversal and overwrites", async () => {
+  const { applyMoves } = await import("../src/organize.mjs");
+  const root = vault({ "a.md": "a" });
+  mkdirSync(join(root, "03-知识库-knowledge"), { recursive: true });
+  writeFileSync(join(root, "03-知识库-knowledge", "a.md"), "already");
+
+  const outside = applyMoves(root, [{ src: "a.md", dst: "../escape.md" }]);
+  assert.equal(outside.applied || 0, 0);
+  assert.ok(outside.rejected.some((r) => r.why.includes("outside")));
+
+  const overwrite = applyMoves(root, [{ src: "a.md", dst: "03-知识库-knowledge/a.md" }]);
+  assert.equal(overwrite.applied || 0, 0);
+  assert.ok(overwrite.rejected.some((r) => r.why.includes("overwrite")));
+  assert.ok(existsSync(join(root, "a.md")), "source untouched on refusal");
 });

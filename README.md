@@ -180,7 +180,14 @@ The five rules the agent works by:
 node bin/noesis.mjs mcp my-library
 ```
 
-Speaks stdio JSON-RPC 2.0 and exposes `noesis_search`, `noesis_read` (optionally one section), `noesis_related`, `noesis_stats`, `noesis_library_check` and `noesis_library_log`. The agent gets structured JSON with `as_of`, `drift` and `section`, and never has to parse a coloured table.
+Speaks stdio JSON-RPC 2.0 and exposes nine tools:
+
+| Group | Tools |
+|---|---|
+| Read | `noesis_search`, `noesis_read` (optionally one section), `noesis_related`, `noesis_stats`, `noesis_library_check`, `noesis_library_log` |
+| Write (transactional) | `noesis_organize_plan` (dry run), `noesis_apply_moves`, `noesis_undo` |
+
+An agent gets structured JSON with `as_of`, `drift` and `section`, and never has to parse a coloured table. Mutations are safe by construction: the mapping table is written **before** the filesystem changes, a destination that already exists is refused (never overwritten), nothing is deleted, and every pass returns an `op_id` that `noesis_undo` reverses. A pass is capped at 200 moves.
 
 ## Development
 

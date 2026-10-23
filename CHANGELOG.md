@@ -10,7 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/) and this proj
 - **`--as-of <time>`** — time-travel search. Segments carry their build time, so `search --as-of 2026-10-01` answers from the state of the library on that day.
 - **Passage index** — notes at or above `passageMinDocChars` (default 20 KB) are split on headings into passage rows that carry a parent pointer, a heading path and byte offsets. Ranking uses the best passage to boost its document, and the snippet is sliced from that section: results can answer "which section", not just "which file".
 - **Graph authority** — `linkAuthority()` (PageRank, 20 iterations) feeds the ranking as `score × (1 + authorityBoost × authority)`; `relatedDocs()` (personalized PageRank) powers `noesis related` and `/api/related`.
-- **MCP server** — `noesis mcp <dir>` speaks stdio JSON-RPC 2.0 with six tools: `noesis_search`, `noesis_read`, `noesis_related`, `noesis_stats`, `noesis_library_check`, `noesis_library_log`.
+- **MCP server** — `noesis mcp <dir>` speaks stdio JSON-RPC 2.0 with nine tools: `noesis_search`, `noesis_read`, `noesis_related`, `noesis_stats`, `noesis_library_check`, `noesis_library_log`, and the transactional trio `noesis_organize_plan` / `noesis_apply_moves` / `noesis_undo`.
+- **Transactional library mutations** (`src/organize.mjs`) — a plan is always a dry run; applying writes the mapping table *before* touching the filesystem, refuses traversal and overwrites, never deletes, and returns an `op_id` that `undo` reverses. Capped at 200 moves per pass.
 - Search responses now carry `as_of`, `drift`, `returned` and per-hit `section`.
 - UI: freshness chip (index age + pending files), section chips on hits, token-aware requests.
 

@@ -9,6 +9,7 @@ import { createSearcher } from "./index.mjs";
 import { linkAuthority, relatedDocs } from "./graph.mjs";
 import { checkLibrary } from "./library.mjs";
 import { readJournal } from "./portable.mjs";
+import { planOrganization, applyMoves, undoOp } from "./organize.mjs";
 
 const VERSION = "0.5.0";
 const PROTOCOL = "2024-11-05";
@@ -66,6 +67,53 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: { root: { type: "string" }, tail: { type: "number" } }
+    }
+  },
+  {
+    name: "noesis_organize_plan",
+    description: "Dry run: propose where loose root entries and inbox items should go. Writes nothing. Always call this before noesis_apply_moves.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root: { type: "string" },
+        limit: { type: "number", description: "max items to return (default 50)" },
+        keep: { type: "array", items: { type: "string" }, description: "root entries to leave alone" }
+      }
+    }
+  },
+  {
+    name: "noesis_apply_moves",
+    description: "Move files inside the library. Writes the mapping table FIRST, never overwrites, never deletes. Returns an op_id that noesis_undo can reverse.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root: { type: "string" },
+        moves: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { src: { type: "string" }, dst: { type: "string" }, type: { type: "string" } },
+            required: ["src", "dst"]
+          }
+        },
+        dry: { type: "boolean" },
+        actor: { type: "string" }
+      },
+      required: ["moves"]
+    }
+  },
+  {
+    name: "noesis_undo",
+    description: "Reverse one apply_moves pass from its mapping table. Never overwrites an existing file.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root: { type: "string" },
+        op_id: { type: "string", description: "value returned by noesis_apply_moves" },
+        dry: { type: "boolean" },
+        actor: { type: "string" }
+      },
+      required: ["op_id"]
     }
   }
 ];
@@ -159,6 +207,23 @@ export async function handleRpc(msg, ctx) {
   if (name === "noesis_library_log") {
     const root = String(args.root || cfg.root);
     return reply(asText({ root, rows: readJournal(root, args.tail || 20) }));
+  }
+
+  if (name === "noesis_organize_plan") {
+    const root = String(args.root || cfg.root);
+    return reply(asText(planOrganization(root, { limit: args.limit || 50, keep: args.keep || [] })));
+  }
+
+  if (name === "noesis_apply_moves") {
+    const root = String(args.root || cfg.root);
+    const res = applyMoves(root, args.moves, { dry: !!args.dry, actor: args.actor || "mcp" });
+    return reply(asText(res));
+  }
+
+  if (name === "noesis_undo") {
+    const root = String(args.root || cfg.root);
+    const res = undoOp(root, args.op_id, { dry: !!args.dry, actor: args.actor || "mcp" });
+    return reply(asText(res));
   }
 
   return reply(asText({ error: "unknown tool", name }));
