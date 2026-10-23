@@ -13,7 +13,8 @@ Noesis is deliberately small: eight core modules, one CLI, one optional server, 
 | `src/index.mjs` | Inverted index build, binary (de)serialize, segment merge, BM25, exact top-k |
 | `src/segments.mjs` | Segment store: manifest v2, append, tombstones, merge, compaction |
 | `src/passages.mjs` | Heading-anchored passage splitter (parent pointer + offsets) |
-| `src/mcp.mjs` | MCP server over stdio JSON-RPC (search / read / related / library) |
+| `src/mcp.mjs` | MCP server over stdio JSON-RPC (search / read / related / library / moves) |
+| `src/organize.mjs` | Transactional library moves: plan, apply (mapping table first), undo |
 | `src/search.mjs` | Query parsing, filters, snippets |
 | `src/graph.mjs` | Wiki-link resolution, backlinks, orphans, dangling, PageRank authority, related |
 | `src/server.mjs` | Local HTTP server (`/api/search`, `/api/stats`, minimal UI) |
