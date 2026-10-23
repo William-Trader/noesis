@@ -45,6 +45,24 @@ node bin/noesis.mjs build  examples/demo-vault
 node bin/noesis.mjs search examples/demo-vault 分词
 ```
 
+## Just ask your agent (no commands)
+
+Hand it the folder and one sentence. The repo ships the contract the agent needs:
+
+- **[docs/QUICKSTART-小白.md](docs/QUICKSTART-小白.md)** — three sentences you can paste ("帮我一键整理…", "把这个库带走…", "把移动硬盘上的改动拷回来…").
+- **[docs/HANDOVER.md](docs/HANDOVER.md)** — the agent-side contract: what to check first, what must never happen, how to report.
+- **[skills/noesis-library/SKILL.md](skills/noesis-library/SKILL.md)** — the skill itself, versioned next to the code so it travels with the library.
+
+The round trip is complete in both directions:
+
+```bash
+noesis library pack my-vault --out /Volumes/DRIVE/my-vault.tar.gz   # carry it away
+noesis sync my-vault --from /Volumes/DRIVE/my-vault --dry           # see what came back
+noesis sync my-vault --from /Volumes/DRIVE/my-vault                 # bring it home
+```
+
+`tidy` and `sync` never delete, never overwrite silently, write the mapping table before touching the filesystem, and every pass can be undone.
+
 ## First contact (for agents)
 
 When you touch this library for the first time, do not move anything on your own:
@@ -108,7 +126,11 @@ Dark/light, mobile-aware layout, zero dependencies, no external assets.
 | `doctor [dir]` | Health check: broken links, missing/duplicate titles |
 | `ui [dir]` | Build + serve + open the browser (watch on by default) |
 | `serve [dir] [--port N]` | Local search server (binds 127.0.0.1; `--host` / `--token` to widen) |
-| `mcp [dir]` | MCP server over stdio: search / read / related / stats / library tools |
+| `mcp [dir]` | MCP server over stdio: search / read / related / stats / library / tidy / sync tools |
+| `tidy [dir] [--yes]` | One-click organise: plan first, `--yes` applies it (reversible) |
+| `sync [dir] --from <copy>` | Bring edits back from a portable copy (old files are backed up) |
+| `onboard [dir]` | First-contact wizard + the paragraph to hand to an agent |
+| `undo <dir> <op_id>` | Reverse one tidy/sync pass |
 
 ## Notes are just Markdown
 

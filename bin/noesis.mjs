@@ -14,6 +14,8 @@ import { scaffoldLibrary, checkLibrary, findDuplicates, renderIndex, LIBRARY_DIR
 import { listedVolumes, currentVolume, displayVolume, readHome, recordHome, readJournal, appendJournal, undoMapping, packLibrary, manualText, JOURNAL, HOME_RECORD, MANUAL_FILE } from "../src/portable.mjs";
 import { ensureState, saveManifest, writeSegment, loadVault, compact, segmentDir, segmentBytes, countDrift, SEG_DIR, MAX_SEGMENTS } from "../src/segments.mjs";
 import { passageKey } from "../src/passages.mjs";
+import { planOrganization, applyMoves, undoOp } from "../src/organize.mjs";
+import { planSync, syncBack } from "../src/sync.mjs";
 
 const VERSION = "0.5.0";
 const C = { r: "\u001b[0m", dim: "\u001b[2m", b: "\u001b[1m", g: "\u001b[32m", y: "\u001b[33m", rd: "\u001b[31m", cy: "\u001b[36m" };
@@ -41,6 +43,10 @@ const HELP = [
   "  serve [dir] [--port N]  本地检索服务 (默认只绑 127.0.0.1)",
   "  ui [dir]                一键：增量构建 + 起服务 + 开浏览器",
   "  mcp [dir]               以 MCP (stdio JSON-RPC) 暴露检索与库工具",
+  "  tidy [dir] [--yes]      一键整理：先出计划，--yes 才执行（可撤销）",
+  "  sync [dir] --from <副本>  把移动副本里的更新拷回来（旧文件先备份）",
+  "  onboard [dir]           小白引导：体检 + 给 agent 的交接话术",
+  "  undo <dir> <op_id>      撤销一次整理（按映射表反向还原）",
   "  library ...             资产库建档 / 体检 / 查重 / 台账 (见 library help)",
   "",
   "选项:",
@@ -86,6 +92,9 @@ function parseArgs(argv) {
     else if (a === "--host") flags.host = argv[++i];
     else if (a === "--token") flags.token = argv[++i];
     else if (a === "--as-of") flags.asOf = argv[++i];
+    else if (a === "--yes" || a === "-y") flags.yes = true;
+    else if (a === "--from") flags.from = argv[++i];
+    else if (a === "--build") flags.build = true;
     else if (a === "-h" || a === "--help") flags.help = true;
     else if (a === "-v" || a === "--version") flags.version = true;
     else rest.push(a);
@@ -378,6 +387,90 @@ function cmdMcp(dir) {
   startMcp(loaded.idx, cfg, { readText, state: loaded.state });
 }
 
+function cmdTidy(dir, flags) {
+  const cfg = loadConfig(dir);
+  const keep = flags.keep || [];
+  const preview = planOrganization(cfg.root, { keep, limit: flags.limit || 20 });
+  if (!preview.total) {
+    console.log(C.g + "✓ 库根已干净" + C.r + "  没有需要归档的散装条目。");
+    return;
+  }
+  console.log(C.b + "一键整理 · 计划" + C.r + "  " + cfg.root);
+  console.log("  " + C.dim + "共 " + preview.total + " 项 · " + human(preview.bytes) + (preview.conflicts ? " · " + preview.conflicts + " 项目标已存在（会跳过）" : "") + C.r);
+  preview.items.forEach((i) => {
+    console.log("  " + (i.conflict ? C.y + "跳过" + C.r : C.cy + "移动" + C.r) + "  " + i.srcRel + C.dim + "  ->  " + C.dstRel + "  (" + i.reason + ")" + C.r);
+  });
+  if (preview.total > preview.items.length) console.log("  " + C.dim + "… 其余 " + (preview.total - preview.items.length) + " 项未显示" + C.r);
+
+  if (!flags.yes) {
+    console.log("\n" + C.y + "这是计划，还没有动任何文件。" + C.r + " 确认执行：");
+    console.log("  " + C.cy + "noesis tidy \"" + cfg.root + "\" --yes" + C.r);
+    return;
+  }
+
+  const full = planOrganization(cfg.root, { keep, limit: 10000 });
+  const moves = full.items.filter((i) => !i.conflict).map((i) => ({ src: i.srcRel, dst: i.dstRel, reason: i.reason }));
+  const res = applyMoves(cfg.root, moves, { actor: flags.actor || "agent" });
+  console.log("\n" + C.g + "✓ 整理完成" + C.r + "  移动 " + (res.applied || 0) + " 项" + (res.rejected && res.rejected.length ? "，跳过 " + res.rejected.length + " 项" : ""));
+  if (res.op_id) console.log("  " + C.dim + "映射表" + C.r + " " + res.op_id + "   " + C.dim + "撤销: noesis undo \"" + cfg.root + "\" " + res.op_id + C.r);
+  try {
+    writeFileSync(join(cfg.root, "INDEX.md"), renderIndex(cfg.root));
+    console.log("  " + C.dim + "INDEX.md 已重生成" + C.r);
+  } catch (e) { /* 库根只读时忽略 */ }
+  if (flags.build) {
+    const idx = build(cfg.root, { quiet: true });
+    console.log("  " + C.dim + "检索索引已更新（" + idx.N + " 行）" + C.r);
+  }
+}
+
+function cmdSync(dir, flags) {
+  const cfg = loadConfig(dir);
+  if (!flags.from) {
+    console.error(C.rd + "缺少 --from" + C.r + "  用法: noesis sync <库> --from <移动副本目录> [--dry]");
+    process.exit(1);
+  }
+  const from = resolve(flags.from);
+  if (!existsSync(from)) { console.error(C.rd + "副本目录不存在: " + from + C.r); process.exit(2); }
+  const plan = planSync(cfg.root, from);
+  console.log(C.b + "拷回更新 · 对比" + C.r + "  " + from + C.dim + "  ->  " + cfg.root + C.r);
+  console.log("  新增 " + plan.add + "   " + "更新 " + plan.update + "   " + C.dim + "相同 " + plan.same + " · 库内较新/相同 " + plan.skip + C.r);
+  plan.items.slice(0, flags.limit || 20).forEach((i) => {
+    console.log("  " + (i.action === "add" ? C.g + "新增" + C.r : C.cy + "更新" + C.r) + "  " + i.rel + C.dim + "  (" + i.why + ")" + C.r);
+  });
+  if (flags.dry) { console.log("\n" + C.y + "dry-run：未写入任何文件。" + C.r); return; }
+  if (!plan.items.length) { console.log("\n" + C.g + "✓ 没有需要回写的文件" + C.r); return; }
+  const res = syncBack(cfg.root, from, { actor: flags.actor || "agent" });
+  console.log("\n" + C.g + "✓ 已回写 " + res.applied + " 个文件" + C.r);
+  if (res.backupDir) console.log("  " + C.dim + "被覆盖的旧文件已备份到" + C.r + " " + res.backupDir);
+  if (res.mapping) console.log("  " + C.dim + "映射表" + C.r + " " + res.mapping);
+}
+
+function cmdOnboard(dir, flags) {
+  const root = resolve(dir || ".");
+  const rep = checkLibrary(root, { keep: flags.keep || [] });
+  const vols = listedVolumes();
+  const hasIndex = existsSync(join(root, ".noesis", "manifest.json"));
+  console.log(C.b + "Noesis · 小白引导" + C.r + "  " + root);
+  console.log("");
+  console.log("  库结构    " + (rep.missingDirs.length ? C.y + "缺 " + rep.missingDirs.length + " 个编号目录" + C.r : C.g + "完整" + C.r));
+  console.log("  库根散装  " + (rep.stray.length ? C.y + rep.stray.length + " 项" + C.r : C.g + "0" + C.r));
+  console.log("  检索索引  " + (hasIndex ? C.g + "已建立" + C.r : C.y + "还没有（先跑 noesis build）" + C.r));
+  console.log("  候选盘位  " + (vols.length ? vols.map((v) => v.name + " " + v.freeGB + "GB").join(" · ") : "无"));
+  console.log("");
+  console.log(C.b + "把下面这段话直接发给你的 agent：" + C.r);
+  console.log(C.dim + "------------------------------------------------------------" + C.r);
+  console.log("这是我的 Noesis 知识库：" + root);
+  console.log("请先读 Noesis 仓库里的 docs/HANDOVER.md 和 skills/noesis-library/SKILL.md，然后帮我一键整理：");
+  console.log("1) 先跑体检和整理计划给我看；2) 我确认后再执行；3) 汇报移动了什么、为什么、怎么撤销。");
+  console.log(C.dim + "------------------------------------------------------------" + C.r);
+  console.log("");
+  console.log("常用命令：");
+  console.log("  noesis build \"" + root + "\"        建立/更新检索索引");
+  console.log("  noesis tidy  \"" + root + "\"        一键整理（先看计划，加 --yes 执行）");
+  console.log("  noesis library pack \"" + root + "\"  打包带走（不含可重建的索引）");
+  console.log("  noesis sync  \"" + root + "\" --from <副本>   把副本里的更新拷回来");
+}
+
 function cmdLibrary(action, dir, flags, extra) {
   const keep = flags.keep || [];
   extra = extra || [];
@@ -548,6 +641,18 @@ function main() {
   if (cmd === "graph") return cmdGraph(rest[0] || ".", flags);
   if (cmd === "doctor") return cmdDoctor(rest[0] || ".", flags);
   if (cmd === "mcp") return cmdMcp(rest[0] || ".");
+  if (cmd === "tidy") return cmdTidy(rest[0] || ".", flags);
+  if (cmd === "sync") return cmdSync(rest[0] || ".", flags);
+  if (cmd === "onboard") return cmdOnboard(rest[0] || ".", flags);
+  if (cmd === "undo") {
+    const r = undoOp(rest[0] || ".", rest[1] || "", { dry: flags.dry, actor: flags.actor || "agent" });
+    if (flags.json) { console.log(JSON.stringify(r, null, 2)); return; }
+    if (r.error) { console.error(C.rd + r.error + C.r); process.exit(2); }
+    console.log(C.b + "撤销" + C.r + "  " + (r.op_id || "") + (r.dry ? C.y + "  (dry-run)" + C.r : ""));
+    (r.plan || []).forEach((p) => console.log("  " + p.action + "  " + p.src));
+    console.log((r.dry ? "计划还原 " : "已还原 ") + r.applied + " 项");
+    return;
+  }
   if (cmd === "library") return cmdLibrary(rest[0] || "check", rest[1] || ".", flags, rest.slice(2));
   if (cmd === "ui") return cmdUi(rest[0] || ".", flags);
   if (cmd === "serve") {

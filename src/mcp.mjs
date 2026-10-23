@@ -10,6 +10,7 @@ import { linkAuthority, relatedDocs } from "./graph.mjs";
 import { checkLibrary } from "./library.mjs";
 import { readJournal } from "./portable.mjs";
 import { planOrganization, applyMoves, undoOp } from "./organize.mjs";
+import { planSync, syncBack } from "./sync.mjs";
 
 const VERSION = "0.5.0";
 const PROTOCOL = "2024-11-05";
@@ -100,6 +101,32 @@ const TOOLS = [
         actor: { type: "string" }
       },
       required: ["moves"]
+    }
+  },
+  {
+    name: "noesis_tidy",
+    description: "One-click tidy: returns the plan by default. Set apply=true ONLY after the user confirms; it writes the mapping table first and never overwrites or deletes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root: { type: "string" },
+        apply: { type: "boolean", description: "false = plan only (default)" },
+        keep: { type: "array", items: { type: "string" } },
+        limit: { type: "number" }
+      }
+    }
+  },
+  {
+    name: "noesis_sync",
+    description: "Bring edits back from a carried copy. Dry run by default; apply=true copies files home after backing up anything it overwrites.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        root: { type: "string" },
+        from: { type: "string", description: "path of the portable copy" },
+        apply: { type: "boolean", description: "false = dry run (default)" }
+      },
+      required: ["from"]
     }
   },
   {
@@ -217,6 +244,24 @@ export async function handleRpc(msg, ctx) {
   if (name === "noesis_apply_moves") {
     const root = String(args.root || cfg.root);
     const res = applyMoves(root, args.moves, { dry: !!args.dry, actor: args.actor || "mcp" });
+    return reply(asText(res));
+  }
+
+  if (name === "noesis_tidy") {
+    const root = String(args.root || cfg.root);
+    const plan = planOrganization(root, { keep: args.keep || [], limit: args.limit || 50 });
+    if (!args.apply) return reply(asText(Object.assign({ applied: 0, dry: true }, plan)));
+    const moves = planOrganization(root, { keep: args.keep || [], limit: 10000 }).items
+      .filter((i) => !i.conflict)
+      .map((i) => ({ src: i.srcRel, dst: i.dstRel, reason: i.reason }));
+    return reply(asText(applyMoves(root, moves, { actor: "mcp" })));
+  }
+
+  if (name === "noesis_sync") {
+    const root = String(args.root || cfg.root);
+    const from = String(args.from || "");
+    if (!from) return reply(asText({ error: "--from is required" }));
+    const res = args.apply ? syncBack(root, from, { actor: "mcp" }) : planSync(root, from);
     return reply(asText(res));
   }
 
