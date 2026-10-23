@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-10-23
+
+### Added
+- **`tidy` — one-click organise for beginners.** `noesis tidy <vault>` prints a plan (what moves where, and why) and changes nothing; `--yes` applies it, regenerates `INDEX.md` and can rebuild the index. Every pass is reversible through its mapping table.
+- **`sync` — carry the library away and bring the edits home.** `noesis sync <vault> --from <copy> [--dry]` compares a portable copy with the live library and copies back only newer/added files. Anything it overwrites is first archived under `05-归档-archive/_sync-backup-<time>/`, and the mapping table makes the overwrite reversible. Nothing is deleted.
+- **`undo`** — reverse one tidy/sync pass by its `op_id`.
+- **`onboard`** — first-contact wizard: structure, stray entries, index freshness, candidate drives, plus a copy-paste paragraph to hand to any agent.
+- **Agent handover kit:** [docs/HANDOVER.md](docs/HANDOVER.md) (the contract an agent follows), [docs/QUICKSTART-小白.md](docs/QUICKSTART-小白.md) (three sentences a non-technical user can paste), and [skills/noesis-library/SKILL.md](skills/noesis-library/SKILL.md) (the skill, shipped with the repo so it travels with the library).
+- **MCP:** `noesis_tidy` (plan by default, `apply: true` to execute) and `noesis_sync` (dry run by default). Eleven tools total.
+
+### Changed
+- `library pack` remains the carry mechanism; `sync` is its return path, so the round trip is now complete in both directions.
+
+### Safety
+- `tidy`/`sync` never delete, never overwrite a destination silently, refuse paths outside the library root, cap a pass at 200 moves, and write the mapping table **before** touching the filesystem.
+
 ## [0.5.0] - 2026-10-23
 
 ### Added

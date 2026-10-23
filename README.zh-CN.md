@@ -72,6 +72,20 @@ node bin/noesis.mjs library manual   <库>                        # 生成说明
 
 细节见 [docs/PORTABLE.md](docs/PORTABLE.md)。
 
+## 直接对 agent 说人话
+
+把库目录和一句话交给 agent 就够了，不需要记命令：
+
+- 「帮我一键整理这个库」→ 先出计划，你确认后才执行，可整批撤销；
+- 「把这个库带走」→ 打包成一个便携包（不含可重建的索引）；
+- 「把移动硬盘上的改动拷回来」→ 只回写更新/新增，覆盖前自动备份。
+
+配套文档随仓库一起走：
+
+- [docs/QUICKSTART-小白.md](docs/QUICKSTART-小白.md) —— 可以直接复制粘贴的三句话；
+- [docs/HANDOVER.md](docs/HANDOVER.md) —— agent 的完整交接契约；
+- [skills/noesis-library/SKILL.md](skills/noesis-library/SKILL.md) —— 技能本体。
+
 ## 本地界面
 
 一条命令完成：增量构建 → 拉起常驻服务 → 自动打开浏览器：
@@ -108,7 +122,11 @@ node bin/noesis.mjs ui my-vault --no-open --port 4317
 | `doctor [dir]` | 体检：断链、缺标题、重复标题 |
 | `ui [dir]` | 一键：构建 + 起服务 + 开浏览器（默认 watch 自动重建）|
 | `serve [dir] [--port N]` | 本地检索服务（默认只绑 127.0.0.1；`--host` / `--token` 显式放开） |
-| `mcp [dir]` | MCP（stdio JSON-RPC）：检索 / 读取 / 相关 / 统计 / 库体检 |
+| `mcp [dir]` | MCP（stdio JSON-RPC）：检索 / 读取 / 相关 / 统计 / 库体检 / 整理 / 回写 |
+| `tidy [dir] [--yes]` | 一键整理：先出计划，`--yes` 才执行（可撤销） |
+| `sync [dir] --from <副本>` | 把移动副本里的更新拷回来（覆盖前先备份） |
+| `onboard [dir]` | 小白引导 + 给 agent 的交接话术 |
+| `undo <dir> <op_id>` | 撤销一次整理 |
 
 ## 笔记就是 Markdown
 
