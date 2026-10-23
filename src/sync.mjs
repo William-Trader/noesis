@@ -4,7 +4,7 @@
 // edits home without losing anything: a file that would be overwritten is first
 // copied into an archive backup, and the mapping table records where it went.
 import { existsSync, mkdirSync, copyFileSync, statSync, readFileSync, writeFileSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import { join, dirname, relative, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { walkAll } from "./library.mjs";
 import { appendJournal } from "./portable.mjs";
@@ -16,6 +16,10 @@ function sha(file, limit) {
   const st = statSync(file);
   if (limit && st.size > limit) return null;
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function statSize(file) {
+  try { return statSync(file).size; } catch (e) { return -1; }
 }
 
 function mtimeMs(file) {
@@ -34,18 +38,29 @@ function isMeta(rel) {
 
 // Compare a carried copy against the live library and report what would come back.
 export function planSync(root, fromDir, opts = {}) {
+  const absRoot = resolve(root);
+  const absFrom = resolve(fromDir);
+  if (absRoot === absFrom) return { root: absRoot, from: absFrom, total: 0, add: 0, update: 0, same: 0, skip: 0, items: [], hidden: 0, note: "source and library are the same directory" };
+  const cap = opts.maxHashBytes == null ? 64 * 1024 * 1024 : opts.maxHashBytes;
   const from = walkAll(fromDir, { skipDirs: SKIP });
   const items = [];
   for (const f of from) {
     const rel = relative(fromDir, f).split("\\").join("/");
-    if (!rel || rel.startsWith("._") || isMeta(rel)) continue;
+    if (!rel || rel.startsWith("._") || rel.split("/").pop() === ".DS_Store" || isMeta(rel)) continue;
     const dst = join(root, rel);
     let action = "add";
     let why = "missing in library";
     if (existsSync(dst)) {
-      const a = sha(f, opts.maxHashBytes);
-      const b = sha(dst, opts.maxHashBytes);
+      const a = sha(f, cap);
+      const b = sha(dst, cap);
       if (a && b && a === b) { action = "same"; why = "identical"; }
+      else if (!a || !b) {
+        // Huge file: fall back to size + mtime, never copy blindly.
+        const sameSize = statSize(f) === statSize(dst);
+        if (sameSize && mtimeMs(f) <= mtimeMs(dst)) { action = "same"; why = "size/time match"; }
+        else if (mtimeMs(f) > mtimeMs(dst)) { action = "update"; why = "copy is newer (large file)"; }
+        else { action = "skip"; why = "library is newer or equal"; }
+      }
       else if (mtimeMs(f) > mtimeMs(dst)) { action = "update"; why = "copy is newer"; }
       else { action = "skip"; why = "library is newer or equal"; }
     }

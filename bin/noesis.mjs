@@ -16,8 +16,9 @@ import { ensureState, saveManifest, writeSegment, loadVault, compact, segmentDir
 import { passageKey } from "../src/passages.mjs";
 import { planOrganization, applyMoves, undoOp } from "../src/organize.mjs";
 import { planSync, syncBack } from "../src/sync.mjs";
+import { checkUpdate, currentVersion } from "../src/update.mjs";
 
-const VERSION = "0.5.0";
+const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const C = { r: "\u001b[0m", dim: "\u001b[2m", b: "\u001b[1m", g: "\u001b[32m", y: "\u001b[33m", rd: "\u001b[31m", cy: "\u001b[36m" };
 
 function human(n) {
@@ -47,6 +48,7 @@ const HELP = [
   "  sync [dir] --from <副本>  把移动副本里的更新拷回来（旧文件先备份）",
   "  onboard [dir]           小白引导：体检 + 给 agent 的交接话术",
   "  undo <dir> <op_id>      撤销一次整理（按映射表反向还原）",
+  "  update [dir] [--check]  检查 GitHub 最新版本（结果缓存 6 小时，--force 强制）",
   "  library ...             资产库建档 / 体检 / 查重 / 台账 (见 library help)",
   "",
   "选项:",
@@ -95,6 +97,7 @@ function parseArgs(argv) {
     else if (a === "--yes" || a === "-y") flags.yes = true;
     else if (a === "--from") flags.from = argv[++i];
     else if (a === "--build") flags.build = true;
+    else if (a === "--force") flags.force = true;
     else if (a === "-h" || a === "--help") flags.help = true;
     else if (a === "-v" || a === "--version") flags.version = true;
     else rest.push(a);
@@ -112,8 +115,9 @@ function asOfMs(v) {
 
 function loadVaultOrExit(cfg, flags) {
   const asOf = asOfMs(flags && flags.asOf);
+  const hasManifest = existsSync(join(cfg.indexDir, "manifest.json"));
   const loaded = loadVault(cfg, { asOf });
-  if (!loaded.idx.N) {
+  if (!hasManifest) {
     console.error(C.rd + "未找到索引: " + join(cfg.indexDir, SEG_DIR) + C.r + "\n先运行: noesis build " + cfg.root);
     process.exit(2);
   }
@@ -217,6 +221,13 @@ function build(root, flags) {
       compact(cfg, state);
       compacted = true;
     }
+  }
+
+  // A vault with zero files still deserves a manifest: "built and empty" is
+  // different from "never built", and search must not report a missing index.
+  if (!existsSync(join(cfg.indexDir, "manifest.json"))) {
+    state.builtAt = state.builtAt || Date.now();
+    saveManifest(cfg, state);
   }
 
   const stats = {
@@ -389,6 +400,10 @@ function cmdMcp(dir) {
 
 function cmdTidy(dir, flags) {
   const cfg = loadConfig(dir);
+  if (!existsSync(cfg.root)) {
+    console.error(C.rd + "目录不存在: " + cfg.root + C.r + "\n先创建或用 noesis init <dir>");
+    process.exit(2);
+  }
   const keep = flags.keep || [];
   const preview = planOrganization(cfg.root, { keep, limit: flags.limit || 20 });
   if (!preview.total) {
@@ -445,8 +460,31 @@ function cmdSync(dir, flags) {
   if (res.mapping) console.log("  " + C.dim + "映射表" + C.r + " " + res.mapping);
 }
 
+async function cmdUpdate(dir, flags) {
+  const cfg = loadConfig(dir || ".");
+  const cachePath = join(cfg.indexDir, "update.json");
+  const data = await checkUpdate({ cachePath, force: !!flags.force });
+  if (flags.json) { console.log(JSON.stringify(data, null, 2)); return; }
+  if (data.error) {
+    console.log(C.y + "更新检查失败（不影响本地使用）: " + data.error + C.r);
+    if (data.latest) console.log("  " + C.dim + "缓存: 最新已知 v" + data.latest + C.r);
+    return;
+  }
+  if (data.updateAvailable) {
+    console.log(C.b + "发现新版本 v" + data.latest + C.r + "  当前 v" + data.current);
+    if (data.releaseUrl) console.log("  " + C.cy + data.releaseUrl + C.r);
+    console.log("  " + C.dim + "升级: git pull && npm test（或重新 clone；索引会保留）" + C.r);
+  } else {
+    console.log(C.g + "✓ 已是最新版本" + C.r + "  v" + data.current + C.dim + "  （检查于 " + data.checkedAt + (data.cached ? " · 缓存" : "") + "）" + C.r);
+  }
+}
+
 function cmdOnboard(dir, flags) {
   const root = resolve(dir || ".");
+  if (!existsSync(root)) {
+    console.error(C.rd + "目录不存在: " + root + C.r + "\n先创建或用 noesis init <dir>");
+    process.exit(2);
+  }
   const rep = checkLibrary(root, { keep: flags.keep || [] });
   const vols = listedVolumes();
   const hasIndex = existsSync(join(root, ".noesis", "manifest.json"));
@@ -642,6 +680,7 @@ function main() {
   if (cmd === "doctor") return cmdDoctor(rest[0] || ".", flags);
   if (cmd === "mcp") return cmdMcp(rest[0] || ".");
   if (cmd === "tidy") return cmdTidy(rest[0] || ".", flags);
+  if (cmd === "update" || cmd === "upgrade-check") return cmdUpdate(rest[0] || ".", flags);
   if (cmd === "sync") return cmdSync(rest[0] || ".", flags);
   if (cmd === "onboard") return cmdOnboard(rest[0] || ".", flags);
   if (cmd === "undo") {

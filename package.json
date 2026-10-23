@@ -1,6 +1,6 @@
 {
   "name": "noesis",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Noesis (agent 资产库) — zero-dependency, local-first knowledge framework: segmented BM25 index, passage-level hits, CJK+Latin search, append-only incremental builds, graph authority, time-travel search, MCP server, CLI and local UI.",
   "type": "module",
   "bin": { "noesis": "bin/noesis.mjs" },

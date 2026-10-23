@@ -3,6 +3,25 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/) and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-10-23
+
+A small update: version awareness, plus the fixes from a full-project pass.
+
+### Added
+- **`noesis update [--force]`** — compares the local version with the latest GitHub release. The answer is cached in `.noesis/update.json` for six hours; an offline check degrades to the cached value (or a friendly error) and never fails the command. `NOESIS_UPDATE_URL` overrides the endpoint for testing/mirrors.
+- **`noesis_update_check`** MCP tool, **`/api/version`** endpoint, and a UI chip when a newer release exists.
+- `version` now reads `package.json` instead of a hand-maintained constant, so it cannot drift again.
+
+### Fixed
+- **Empty vault:** `build` on zero files wrote no manifest, so the next `search` claimed "no index". It now records an empty build, and searching an empty vault returns "无结果" with exit 0.
+- **Missing directory:** `onboard` and `tidy` crashed with a stack trace; both now exit 2 with a plain message.
+- **sync:** hashing is capped at 64 MB (size+mtime fallback above that), `.DS_Store` files are skipped, and pointing `--from` at the library itself is a no-op instead of pointless work.
+- `/api/stats` byte calculation simplified; graph backlink insertion no longer relies on a comma expression; unused imports removed.
+
+### Verified
+- `node --test`: **47 tests, 0 failures**.
+- `noesis update --json` against the live repository returns the released tag.
+
 ## [0.6.0] - 2026-10-23
 
 ### Added

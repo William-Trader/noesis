@@ -126,7 +126,8 @@ node bin/noesis.mjs ui my-vault --no-open --port 4317
 | `tidy [dir] [--yes]` | 一键整理：先出计划，`--yes` 才执行（可撤销） |
 | `sync [dir] --from <副本>` | 把移动副本里的更新拷回来（覆盖前先备份） |
 | `onboard [dir]` | 小白引导 + 给 agent 的交接话术 |
-| `undo <dir> <op_id>` | 撤销一次整理 |
+| §undo <dir> <op_id>§ | 撤销一次整理 |
+| `update [dir] [--force]` | 检查 GitHub 最新版本（缓存 6 小时，离线降级） |
 
 ## 笔记就是 Markdown
 

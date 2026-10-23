@@ -6,7 +6,7 @@
 import { readdirSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve, basename, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
-import { allowedRootEntry, looksLikeSecret, LIBRARY_DIRS } from "./library.mjs";
+import { allowedRootEntry, looksLikeSecret } from "./library.mjs";
 import { undoMapping, appendJournal } from "./portable.mjs";
 
 const INBOX = "00-收件箱-INBOX";
@@ -72,6 +72,7 @@ function sizeOf(abs) {
 // Dry run: what should move where, and what is already in the way.
 export function planOrganization(root, opts = {}) {
   const absRoot = resolve(root);
+  if (!existsSync(absRoot)) return { root: absRoot, total: 0, returned: 0, conflicts: 0, bytes: 0, items: [], error: "root not found" };
   const keep = opts.keep || [];
   const limit = opts.limit || 50;
   const items = [];
